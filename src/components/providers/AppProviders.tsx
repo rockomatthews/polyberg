@@ -8,6 +8,7 @@ import {
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
 import { AppThemeProvider } from './AppThemeProvider';
+import { AuthProvider } from './AuthProvider';
 
 type Props = {
   children: React.ReactNode;
@@ -28,7 +29,9 @@ export function AppProviders({ children }: Props) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppThemeProvider>{children}</AppThemeProvider>
+      <AuthProvider>
+        <AppThemeProvider>{children}</AppThemeProvider>
+      </AuthProvider>
       <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
     </QueryClientProvider>
   );

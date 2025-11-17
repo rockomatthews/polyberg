@@ -29,6 +29,11 @@ POLYMARKET_RELAYER_CHAIN_ID=137
 POLYMARKET_SAFE_ADDRESS=0xYourSafe
 POLYMARKET_RELAYER_RPC_URL=https://polygon-rpc.com
 POLYMARKET_RELAYER_PRIVATE_KEY=0xyourexecutorprivkey
+
+# Google Auth
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+NEXTAUTH_SECRET=generate_a_strong_random_string
 ```
 
 All env vars are validated at boot via `src/lib/env.ts`. Missing optional values simply disable the dependent widgets (positions, blotter, etc.) until credentials are supplied.

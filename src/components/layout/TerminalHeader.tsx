@@ -13,10 +13,13 @@ import Tooltip from '@mui/material/Tooltip';
 import SearchIcon from '@mui/icons-material/Search';
 import useMediaQuery from '@mui/material/useMediaQuery';
 
+import { signOut, useSession } from 'next-auth/react';
+
 import { useSystemStatus } from '@/hooks/useTerminalData';
 
 export function TerminalHeader() {
   const isMobile = useMediaQuery('(max-width:900px)');
+  const { data: session } = useSession();
   const { data: status } = useSystemStatus();
   const latencyChip =
     status?.latencyMs != null ? `Latency ${status.latencyMs}ms` : 'Latency --';
@@ -36,7 +39,7 @@ export function TerminalHeader() {
           px: { xs: 1.25, md: 2 },
         }}
       >
-        <Image src="/logo-terminal.svg" alt="Polymarket Terminal" width={164} height={28} priority />
+        <Image src="/logo-terminal.png" alt="Polymarket Terminal" width={164} height={28} priority />
         {isMobile ? null : (
           <TextField
             placeholder="Search markets, tickers, outcomes"
@@ -97,9 +100,11 @@ export function TerminalHeader() {
                 height: isMobile ? 30 : 32,
                 bgcolor: 'primary.main',
                 fontSize: '0.85rem',
+                cursor: 'pointer',
               }}
+              onClick={() => signOut()}
             >
-              OP
+              {session?.user?.name?.slice(0, 2).toUpperCase() ?? 'OP'}
             </Avatar>
           </Tooltip>
         </Stack>

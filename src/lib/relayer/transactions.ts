@@ -1,5 +1,5 @@
 import { Interface } from '@ethersproject/abi';
-import { ethers } from 'ethers';
+import { constants } from 'ethers';
 import {
   OperationType,
   SafeTransaction,
@@ -22,7 +22,7 @@ export type ExecuteTxPayload = {
 export function createApprovalTransaction(
   tokenAddress: string,
   spenderAddress: string,
-  amount: string = ethers.constants.MaxUint256.toString(),
+  amount: string = constants.MaxUint256.toString(),
 ): SafeTransaction {
   return {
     to: tokenAddress,

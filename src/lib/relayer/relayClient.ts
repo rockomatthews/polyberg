@@ -1,4 +1,4 @@
-import { providers, Wallet } from 'ethers';
+import { JsonRpcProvider, Wallet } from 'ethers';
 import { RelayClient } from '@polymarket/builder-relayer-client';
 import { BuilderConfig } from '@polymarket/builder-signing-sdk';
 
@@ -16,7 +16,7 @@ const relaySigner =
   env.relayerRpcUrl && env.relayerPrivateKey
     ? new Wallet(
         env.relayerPrivateKey,
-        new providers.JsonRpcProvider(env.relayerRpcUrl, env.relayerChainId ?? env.polymarketChainId),
+        new JsonRpcProvider(env.relayerRpcUrl, env.relayerChainId ?? env.polymarketChainId),
       )
     : undefined;
 

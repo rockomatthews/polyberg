@@ -1,4 +1,5 @@
-import { JsonRpcProvider, Wallet } from 'ethers';
+import { JsonRpcProvider } from '@ethersproject/providers';
+import { Wallet } from '@ethersproject/wallet';
 import { RelayClient } from '@polymarket/builder-relayer-client';
 import { BuilderConfig } from '@polymarket/builder-signing-sdk';
 

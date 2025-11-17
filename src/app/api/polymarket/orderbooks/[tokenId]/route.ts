@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { clobClient } from '@/lib/polymarket/clobClient';
 
+type Params = { tokenId: string };
+
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { tokenId: string } },
+  context: { params: Promise<Params> },
 ) {
-  const tokenId = decodeURIComponent(params.tokenId);
+  const { tokenId: rawTokenId } = await context.params;
+  const tokenId = decodeURIComponent(rawTokenId);
 
   if (!tokenId) {
     return NextResponse.json({ error: 'Missing token id' }, { status: 400 });

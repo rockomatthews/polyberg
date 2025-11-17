@@ -1,0 +1,67 @@
+import { z } from 'zod';
+
+const envSchema = z.object({
+  POLYMARKET_API_HOST: z.string().url().default('https://clob.polymarket.com'),
+  POLYMARKET_CHAIN_ID: z.coerce.number().default(137),
+  POLYMARKET_L2_API_KEY: z.string().optional(),
+  POLYMARKET_L2_API_SECRET: z.string().optional(),
+  POLYMARKET_L2_API_PASSPHRASE: z.string().optional(),
+  POLYMARKET_BUILDER_SIGNER_URL: z.string().url().optional(),
+  POLYMARKET_BUILDER_SIGNER_TOKEN: z.string().optional(),
+  POLYMARKET_BUILDER_API_KEY: z.string().optional(),
+  POLYMARKET_BUILDER_API_SECRET: z.string().optional(),
+  POLYMARKET_BUILDER_API_PASSPHRASE: z.string().optional(),
+  POLYMARKET_RELAYER_URL: z.string().url().optional(),
+  POLYMARKET_RELAYER_CHAIN_ID: z.coerce.number().optional(),
+  POLYMARKET_SAFE_ADDRESS: z.string().optional(),
+  POLYMARKET_RELAYER_RPC_URL: z.string().url().optional(),
+  POLYMARKET_RELAYER_PRIVATE_KEY: z.string().optional(),
+});
+
+const parsed = envSchema.safeParse(process.env);
+
+if (!parsed.success) {
+  console.error('❌ Invalid environment configuration for Polymarket integration:', parsed.error.flatten().fieldErrors);
+  throw new Error('Invalid Polymarket environment configuration. Check .env.local.');
+}
+
+const data = parsed.data;
+
+export const env = {
+  polymarketApiHost: data.POLYMARKET_API_HOST,
+  polymarketChainId: data.POLYMARKET_CHAIN_ID,
+  l2ApiCreds:
+    data.POLYMARKET_L2_API_KEY && data.POLYMARKET_L2_API_SECRET && data.POLYMARKET_L2_API_PASSPHRASE
+      ? {
+          key: data.POLYMARKET_L2_API_KEY,
+          secret: data.POLYMARKET_L2_API_SECRET,
+          passphrase: data.POLYMARKET_L2_API_PASSPHRASE,
+        }
+      : undefined,
+  builderLocalCreds:
+    data.POLYMARKET_BUILDER_API_KEY &&
+    data.POLYMARKET_BUILDER_API_SECRET &&
+    data.POLYMARKET_BUILDER_API_PASSPHRASE
+      ? {
+          key: data.POLYMARKET_BUILDER_API_KEY,
+          secret: data.POLYMARKET_BUILDER_API_SECRET,
+          passphrase: data.POLYMARKET_BUILDER_API_PASSPHRASE,
+        }
+      : undefined,
+  builderSigner: data.POLYMARKET_BUILDER_SIGNER_URL
+    ? {
+        url: data.POLYMARKET_BUILDER_SIGNER_URL,
+        token: data.POLYMARKET_BUILDER_SIGNER_TOKEN,
+      }
+    : undefined,
+  relayerUrl: data.POLYMARKET_RELAYER_URL,
+  relayerChainId: data.POLYMARKET_RELAYER_CHAIN_ID ?? data.POLYMARKET_CHAIN_ID,
+  safeAddress: data.POLYMARKET_SAFE_ADDRESS,
+  relayerRpcUrl: data.POLYMARKET_RELAYER_RPC_URL,
+  relayerPrivateKey: data.POLYMARKET_RELAYER_PRIVATE_KEY,
+};
+
+export const hasL2Auth = Boolean(env.l2ApiCreds);
+export const hasBuilderSigning = Boolean(env.builderSigner || env.builderLocalCreds);
+export const hasRelayer = Boolean(env.relayerUrl);
+

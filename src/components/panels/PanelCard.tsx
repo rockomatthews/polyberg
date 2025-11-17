@@ -5,6 +5,7 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Divider from '@mui/material/Divider';
+import type { SxProps, Theme } from '@mui/material/styles';
 
 type PanelCardProps = {
   title: string;
@@ -12,6 +13,7 @@ type PanelCardProps = {
   actions?: React.ReactNode;
   children: React.ReactNode;
   minHeight?: number;
+  sx?: SxProps<Theme>;
 };
 
 export function PanelCard({
@@ -20,6 +22,7 @@ export function PanelCard({
   actions,
   children,
   minHeight = 0,
+  sx,
 }: PanelCardProps) {
   return (
     <Paper
@@ -31,6 +34,7 @@ export function PanelCard({
         flexDirection: 'column',
         gap: 1.5,
         backgroundColor: 'background.paper',
+        ...sx,
       }}
     >
       <Stack

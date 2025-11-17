@@ -1,7 +1,6 @@
 'use client';
 
 import Box from '@mui/material/Box';
-import Stack from '@mui/material/Stack';
 import Divider from '@mui/material/Divider';
 
 import { TerminalHeader } from './TerminalHeader';
@@ -31,27 +30,63 @@ export function AppShell() {
           flex: 1,
           display: 'grid',
           gap: 2,
-          padding: 2,
+          px: { xs: 1.5, md: 2 },
+          py: { xs: 1.5, md: 2 },
           gridTemplateColumns: {
-            lg: '320px minmax(0, 1.6fr) 360px',
             xs: '1fr',
+            md: 'minmax(0, 1fr) minmax(0, 1fr)',
+            lg: '320px minmax(0, 1.4fr) 360px',
           },
-          gridAutoRows: 'min-content',
+          gridTemplateAreas: {
+            xs: `
+              "watch"
+              "alerts"
+              "ladder"
+              "ticket"
+              "activity"
+              "side"
+            `,
+            md: `
+              "watch ladder"
+              "alerts ladder"
+              "ticket activity"
+              "side activity"
+            `,
+            lg: `
+              "watch ladder side"
+              "alerts ladder side"
+              "ticket ladder side"
+              "activity ladder side"
+            `,
+          },
         }}
       >
-        <Stack spacing={2}>
+        <Box sx={{ gridArea: 'watch' }}>
           <WatchlistPanel />
+        </Box>
+        <Box sx={{ gridArea: 'alerts' }}>
           <AlertsPanel />
-        </Stack>
-        <Stack spacing={2}>
+        </Box>
+        <Box sx={{ gridArea: 'ladder' }}>
           <DepthLadderPanel />
+        </Box>
+        <Box sx={{ gridArea: 'ticket' }}>
           <TradeTicketPanel />
+        </Box>
+        <Box sx={{ gridArea: 'activity' }}>
           <ActivityPanel />
-        </Stack>
-        <Stack spacing={2}>
+        </Box>
+        <Box
+          sx={{
+            gridArea: 'side',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+          }}
+        >
           <PositionsPanel />
           <BlotterPanel />
-        </Stack>
+        </Box>
       </Box>
       <Divider sx={{ opacity: 0.08 }} />
       <Box
@@ -59,6 +94,8 @@ export function AppShell() {
         sx={{
           display: 'flex',
           justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 1,
           alignItems: 'center',
           px: 2,
           py: 1.5,

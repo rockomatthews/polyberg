@@ -11,10 +11,12 @@ import TextField from '@mui/material/TextField';
 import Toolbar from '@mui/material/Toolbar';
 import Tooltip from '@mui/material/Tooltip';
 import SearchIcon from '@mui/icons-material/Search';
+import useMediaQuery from '@mui/material/useMediaQuery';
 
 import { useSystemStatus } from '@/hooks/useTerminalData';
 
 export function TerminalHeader() {
+  const isMobile = useMediaQuery('(max-width:900px)');
   const { data: status } = useSystemStatus();
   const latencyChip =
     status?.latencyMs != null ? `Latency ${status.latencyMs}ms` : 'Latency --';
@@ -28,39 +30,74 @@ export function TerminalHeader() {
         sx={{
           minHeight: 64,
           display: 'flex',
-          alignItems: 'center',
-          gap: 2,
+          alignItems: isMobile ? 'flex-start' : 'center',
+          gap: isMobile ? 1.5 : 2,
+          flexWrap: isMobile ? 'wrap' : 'nowrap',
+          px: { xs: 1.25, md: 2 },
         }}
       >
         <Image src="/logo-terminal.svg" alt="Polymarket Terminal" width={164} height={28} priority />
-        <TextField
-          placeholder="Search markets, tickers, outcomes"
-          variant="outlined"
-          size="small"
-          sx={{ maxWidth: 360, flexShrink: 0 }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" />
-              </InputAdornment>
-            ),
+        {isMobile ? null : (
+          <TextField
+            placeholder="Search markets, tickers, outcomes"
+            variant="outlined"
+            size="small"
+            sx={{ maxWidth: 360, flexShrink: 0 }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
+            }}
+          />
+        )}
+        <Stack
+          direction={isMobile ? 'column' : 'row'}
+          spacing={1}
+          sx={{
+            flex: isMobile ? '1 1 100%' : 1,
+            width: isMobile ? '100%' : 'auto',
           }}
-        />
-        <Stack direction="row" spacing={1} sx={{ flex: 1 }} justifyContent="flex-end">
+          justifyContent={isMobile ? 'flex-start' : 'flex-end'}
+          alignItems={isMobile ? 'stretch' : 'center'}
+        >
+          {isMobile ? (
+            <TextField
+              placeholder="Search markets, tickers, outcomes"
+              variant="outlined"
+              size="small"
+              sx={{ width: '100%' }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" />
+                  </InputAdornment>
+                ),
+              }}
+            />
+          ) : null}
           <Chip
             label={latencyChip}
+            size={isMobile ? 'small' : 'medium'}
             color={status && status.latencyMs != null && status.latencyMs < 80 ? 'success' : 'warning'}
             variant="outlined"
           />
           <Chip
             label={walletChip}
+            size={isMobile ? 'small' : 'medium'}
             variant="outlined"
             color={status?.relayerConnected ? 'primary' : 'warning'}
           />
           <Tooltip title="Operator menu">
             <Avatar
               alt="Operator"
-              sx={{ width: 32, height: 32, bgcolor: 'primary.main', fontSize: '0.9rem' }}
+              sx={{
+                width: isMobile ? 30 : 32,
+                height: isMobile ? 30 : 32,
+                bgcolor: 'primary.main',
+                fontSize: '0.85rem',
+              }}
             >
               OP
             </Avatar>

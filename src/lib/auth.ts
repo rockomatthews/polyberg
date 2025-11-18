@@ -1,10 +1,10 @@
-import NextAuth from 'next-auth/next';
+import type { NextAuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 
 const clientId = process.env.GOOGLE_CLIENT_ID ?? '';
 const clientSecret = process.env.GOOGLE_CLIENT_SECRET ?? '';
 
-export const authOptions = {
+export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
       clientId,
@@ -13,7 +13,7 @@ export const authOptions = {
   ],
   secret: process.env.NEXTAUTH_SECRET,
   session: {
-    strategy: 'jwt' as const,
+    strategy: 'jwt',
   },
   callbacks: {
     async session({ session, token }) {
@@ -23,5 +23,5 @@ export const authOptions = {
       return session;
     },
   },
-} satisfies Parameters<typeof NextAuth>[0];
+};
 

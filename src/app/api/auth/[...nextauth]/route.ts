@@ -1,4 +1,6 @@
 import NextAuth from 'next-auth/next';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 import { authOptions } from '@/lib/auth';
 

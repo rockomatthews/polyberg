@@ -1,8 +1,10 @@
-import type { NextAuthOptions } from 'next-auth';
+import type NextAuthDefault from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 
 const clientId = process.env.GOOGLE_CLIENT_ID ?? '';
 const clientSecret = process.env.GOOGLE_CLIENT_SECRET ?? '';
+
+type NextAuthOptions = Parameters<typeof NextAuthDefault>[0];
 
 export const authOptions: NextAuthOptions = {
   providers: [

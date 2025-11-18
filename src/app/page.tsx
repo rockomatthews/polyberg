@@ -1,4 +1,4 @@
-import { getServerSession } from 'next-auth/next';
+import { getServerSession } from 'next-auth';
 
 import { AppShell } from '@/components/layout/AppShell';
 import { SignInPanel } from '@/components/auth/SignInPanel';

@@ -1,10 +1,10 @@
-import type { AuthOptions } from 'next-auth';
+import NextAuth from 'next-auth/next';
 import GoogleProvider from 'next-auth/providers/google';
 
 const clientId = process.env.GOOGLE_CLIENT_ID ?? '';
 const clientSecret = process.env.GOOGLE_CLIENT_SECRET ?? '';
 
-export const authOptions: AuthOptions = {
+export const authOptions = {
   providers: [
     GoogleProvider({
       clientId,
@@ -23,5 +23,5 @@ export const authOptions: AuthOptions = {
       return session;
     },
   },
-};
+} satisfies Parameters<typeof NextAuth>[0];
 

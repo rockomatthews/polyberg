@@ -7,6 +7,7 @@ import {
   Position,
   SystemStatus,
 } from './types';
+import { getCached, setCached, redisClient } from '@/lib/redis';
 
 const apiGet = async <T>(path: string): Promise<T> => {
   const response = await fetch(path, {
@@ -24,7 +25,23 @@ const apiGet = async <T>(path: string): Promise<T> => {
 
 export async function fetchMarkets(): Promise<Market[]> {
   try {
+    const cached = await getCached<Market[]>('markets:latest');
+    if (cached?.length) {
+      return cached;
+    }
+  } catch (error) {
+    console.warn('[cache] read markets failed', error);
+  }
+  try {
     const data = await apiGet<{ markets: Market[] }>('/api/polymarket/markets');
+    if (data.markets?.length) {
+      setCached('markets:latest', data.markets, 5).catch((err) =>
+        console.warn('[cache] set markets failed', err),
+      );
+      redisClient
+        ?.publish('markets-updates', JSON.stringify({ ts: Date.now(), markets: data.markets }))
+        .catch((err) => console.warn('[redis] publish markets failed', err));
+    }
     return data.markets;
   } catch (error) {
     console.error('[api] fetchMarkets failed', error);
@@ -38,9 +55,30 @@ export async function fetchOrderBook(tokenId: string | null): Promise<OrderBookS
   }
 
   try {
-    return await apiGet<OrderBookSnapshot>(
+    const cached = await getCached<OrderBookSnapshot>(`orderbook:${tokenId}:latest`);
+    if (cached) {
+      return cached;
+    }
+  } catch (error) {
+    console.warn('[cache] read orderbook failed', error);
+  }
+
+  try {
+    const snapshot = await apiGet<OrderBookSnapshot>(
       `/api/polymarket/orderbooks/${encodeURIComponent(tokenId)}`,
     );
+    if (snapshot) {
+      setCached(`orderbook:${tokenId}:latest`, snapshot, 5).catch((err) =>
+        console.warn('[cache] set orderbook failed', err),
+      );
+      redisClient
+        ?.publish(
+          `orderbook-updates:${tokenId}`,
+          JSON.stringify({ ts: Date.now(), book: snapshot }),
+        )
+        .catch((err) => console.warn('[redis] publish orderbook failed', err));
+    }
+    return snapshot;
   } catch (error) {
     console.error('[api] fetchOrderBook failed', error);
     return null;

@@ -34,6 +34,13 @@ POLYMARKET_RELAYER_PRIVATE_KEY=0xyourexecutorprivkey
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 NEXTAUTH_SECRET=generate_a_strong_random_string
+# Neon Postgres
+DATABASE_URL=postgresql://<user>:<password>@<host>/<db>?sslmode=require
+# Upstash Redis
+UPSTASH_REDIS_REST_URL=...
+UPSTASH_REDIS_REST_TOKEN=...
+# Vercel AI Gateway
+VERCEL_AI_API_KEY=...
 ```
 
 All env vars are validated at boot via `src/lib/env.ts`. Missing optional values simply disable the dependent widgets (positions, blotter, etc.) until credentials are supplied.
@@ -52,6 +59,12 @@ REST endpoints you can call (all under `/api/relayer`):
 | `/api/relayer/approval` | POST | Convenience endpoint to approve an ERC20 spend (`{ tokenAddress, spenderAddress, amount? }`) |
 
 Under the hood we follow the same patterns showcased in Polymarket’s repo—see the Quick Start and approval examples in the official docs for additional context [builder-relayer-client](https://github.com/Polymarket/builder-relayer-client).
+
+### Persistence & Caching
+
+- **Neon Postgres**: provisioned via Vercel Storage. `DATABASE_URL` powers `@neondatabase/serverless` in `src/lib/db.ts`, and `ensureUserRecord` (`src/lib/services/userService.ts`) keeps a `users` table in sync when traders sign in.
+- **Upstash Redis**: provisioned alongside Neon. `UPSTASH_REDIS_REST_URL`/`TOKEN` feed `src/lib/redis.ts`, and the market/order book fetchers will cache results for a few seconds to reduce load on the Polymarket APIs.
+- **Vercel AI Gateway**: `VERCEL_AI_API_KEY` drives `/api/ai/suggestions`, which powers the upcoming “Strategy Copilot” surface.
 
 ## Local Development
 

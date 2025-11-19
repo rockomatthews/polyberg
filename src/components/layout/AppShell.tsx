@@ -11,6 +11,7 @@ import { PositionsPanel } from '../panels/PositionsPanel';
 import { BlotterPanel } from '../panels/BlotterPanel';
 import { AlertsPanel } from '../panels/AlertsPanel';
 import { ActivityPanel } from '../panels/ActivityPanel';
+import { StrategyCopilot } from '../panels/StrategyCopilot';
 
 export function AppShell() {
   return (
@@ -73,8 +74,9 @@ export function AppShell() {
         <Box sx={{ gridArea: 'ticket' }}>
           <TradeTicketPanel />
         </Box>
-        <Box sx={{ gridArea: 'activity' }}>
+        <Box sx={{ gridArea: 'activity', display: 'flex', flexDirection: 'column', gap: 2 }}>
           <ActivityPanel />
+          <StrategyCopilot />
         </Box>
         <Box
           sx={{

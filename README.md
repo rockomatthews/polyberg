@@ -31,6 +31,8 @@ POLYMARKET_RELAYER_RPC_URL=https://polygon-rpc.com
 POLYMARKET_RELAYER_PRIVATE_KEY=0xyourexecutorprivkey
 # Optional dedicated key for signing CLOB orders (falls back to relayer key)
 POLYMARKET_ORDER_SIGNER_PRIVATE_KEY=0xyourordersignerkey
+# Collateral token (defaults to Polygon USDC.e)
+POLYMARKET_COLLATERAL_ADDRESS=0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174
 
 # Google Auth
 GOOGLE_CLIENT_ID=...

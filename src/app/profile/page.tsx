@@ -30,6 +30,10 @@ import {
 } from '@/lib/env';
 import { SignOutButton } from '@/components/auth/SignOutButton';
 import { SafePanel } from '@/components/profile/SafePanel';
+import {
+  listCopilotEntries,
+  type CopilotEntry,
+} from '@/lib/services/copilotService';
 
 type StatusChipProps = {
   label: string;
@@ -56,6 +60,7 @@ function formatTimestamp(timestamp?: string) {
 async function loadUser(): Promise<{
   sessionUser: UserRecord | null;
   sessionSafe: UserSafeRecord | null;
+  copilotHistory: CopilotEntry[];
   sessionEmail?: string;
   sessionName?: string;
 }> {
@@ -66,16 +71,19 @@ async function loadUser(): Promise<{
   await ensureUserRecord(session);
   const record = await getUserRecord(session.user.id);
   const safeRecord = await getUserSafe(session.user.id);
+  const history = await listCopilotEntries(session.user.id, 5);
   return {
     sessionUser: record,
     sessionSafe: safeRecord,
+    copilotHistory: history,
     sessionEmail: session.user.email ?? record?.email ?? undefined,
     sessionName: session.user.name ?? record?.name ?? undefined,
   };
 }
 
 export default async function ProfilePage() {
-  const { sessionUser, sessionSafe, sessionEmail, sessionName } = await loadUser();
+  const { sessionUser, sessionSafe, copilotHistory, sessionEmail, sessionName } =
+    await loadUser();
 
   const builderStatuses = [
     { label: 'Builder signer', ok: hasBuilderSigning },
@@ -153,10 +161,30 @@ export default async function ProfilePage() {
               Last synced: {formatTimestamp(sessionUser?.updated_at)}
             </Typography>
             <Divider sx={{ my: 2 }} />
-            <Typography variant="body2" color="text.secondary">
-              AI copilot memories, watchlists, and per-user trade insights will live here so your edge
-              follows your login wherever you trade.
+            <Typography variant="subtitle2" gutterBottom>
+              Copilot Memory
             </Typography>
+            {copilotHistory.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                No AI insights stored yet. Generate intel from the terminal and they’ll appear here.
+              </Typography>
+            ) : (
+              <Stack spacing={1}>
+                {copilotHistory.map((entry) => (
+                  <Box
+                    key={entry.id}
+                    sx={{ p: 1, borderRadius: 1, bgcolor: 'rgba(255,255,255,0.04)' }}
+                  >
+                    <Typography variant="caption" color="text.secondary">
+                      {new Date(entry.created_at).toLocaleString()}
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 0.5 }}>
+                      {entry.response}
+                    </Typography>
+                  </Box>
+                ))}
+              </Stack>
+            )}
           </CardContent>
         </Card>
 

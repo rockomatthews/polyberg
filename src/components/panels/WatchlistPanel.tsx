@@ -6,10 +6,15 @@ import LinearProgress from '@mui/material/LinearProgress';
 import Skeleton from '@mui/material/Skeleton';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import StarOutlineIcon from '@mui/icons-material/StarOutline';
+import StarIcon from '@mui/icons-material/Star';
 
 import { PanelCard } from './PanelCard';
 import { useMarketsData } from '@/hooks/useTerminalData';
 import { useTerminalStore } from '@/state/useTerminalStore';
+import { useUserWatchlist } from '@/hooks/useWatchlist';
 
 const getTimeLeftLabel = (endDate: string | null) => {
   if (!endDate) return '––';
@@ -38,6 +43,7 @@ export function WatchlistPanel() {
   const markets = data ?? [];
   const selectedMarketId = useTerminalStore((state) => state.selectedMarketId);
   const setSelection = useTerminalStore((state) => state.setSelection);
+  const { watchlist, toggleWatchlist } = useUserWatchlist();
 
   const defaultMarket = React.useMemo(
     () => (data ?? []).find((market) => market.primaryTokenId),
@@ -53,16 +59,23 @@ export function WatchlistPanel() {
     }
   }, [selectedMarketId, defaultMarket, setSelection]);
 
+  const sortedMarkets = React.useMemo(() => {
+    const favorites = markets.filter((market) => watchlist.includes(market.conditionId));
+    const others = markets.filter((market) => !watchlist.includes(market.conditionId));
+    return [...favorites, ...others];
+  }, [markets, watchlist]);
+
   return (
     <PanelCard title="Watchlist" subtitle="Markets">
       <Stack spacing={1.5}>
         {isFetching && !markets.length ? (
           <Skeleton variant="rounded" height={140} />
         ) : (
-          markets.map((market) => {
+          (sortedMarkets.length ? sortedMarkets : markets).map((market) => {
             const isActive = market.conditionId === selectedMarketId;
             const spreadLabel =
               market.spread != null ? `${market.spread.toFixed(2)}¢` : '––';
+            const isFavorite = watchlist.includes(market.conditionId);
             return (
               <Stack
                 key={market.conditionId}
@@ -103,10 +116,30 @@ export function WatchlistPanel() {
                     Liquidity {formatLiquidity(market.liquidity)}
                   </Typography>
                 </Stack>
+                <Tooltip title={isFavorite ? 'Remove from watchlist' : 'Add to watchlist'}>
+                  <IconButton
+                    size="small"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleWatchlist(market.conditionId, !isFavorite);
+                    }}
+                  >
+                    {isFavorite ? (
+                      <StarIcon fontSize="small" color="warning" />
+                    ) : (
+                      <StarOutlineIcon fontSize="small" />
+                    )}
+                  </IconButton>
+                </Tooltip>
               </Stack>
             );
           })
         )}
+        {!isFetching && watchlist.length === 0 ? (
+          <Typography variant="caption" color="text.secondary">
+            Tap the star icon to build a personalized watchlist.
+          </Typography>
+        ) : null}
       </Stack>
       <LinearProgress
         variant="determinate"

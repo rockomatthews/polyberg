@@ -2,41 +2,105 @@ import { NextRequest, NextResponse } from 'next/server';
 import { JsonRpcProvider } from '@ethersproject/providers';
 import { Interface } from '@ethersproject/abi';
 import { BigNumber } from '@ethersproject/bignumber';
+import { getAddress } from '@ethersproject/address';
+import { formatUnits } from '@ethersproject/units';
 
 import { env, hasRelayer } from '@/lib/env';
 
 const erc20Interface = new Interface(['function balanceOf(address owner) view returns (uint256)']);
 const USDC_DECIMALS = 6;
+const DEFAULT_POLYGON_RPC = 'https://polygon-rpc.com';
+
+const providerCache = new Map<string, JsonRpcProvider>();
+
+function getProvider(rpcUrl: string) {
+  if (!providerCache.has(rpcUrl)) {
+    providerCache.set(
+      rpcUrl,
+      new JsonRpcProvider(rpcUrl, env.relayerChainId ?? env.polymarketChainId),
+    );
+  }
+  return providerCache.get(rpcUrl)!;
+}
+
+function sanitizeRpcMessage(message: string) {
+  if (env.relayerRpcUrl) {
+    return message.replaceAll(env.relayerRpcUrl, '[custom RPC]');
+  }
+  return message;
+}
 
 export async function GET(request: NextRequest) {
-  if (!hasRelayer || !env.relayerRpcUrl) {
-    return NextResponse.json({ error: 'Relayer RPC not configured' }, { status: 400 });
+  if (!hasRelayer) {
+    return NextResponse.json({ error: 'Relayer URL not configured' }, { status: 400 });
   }
 
   const { searchParams } = new URL(request.url);
-  const safeAddress = searchParams.get('safe');
-  if (!safeAddress) {
+  const safeAddressParam = searchParams.get('safe')?.trim();
+  if (!safeAddressParam) {
     return NextResponse.json({ error: 'Safe address required' }, { status: 400 });
   }
 
+  let safeAddress: string;
   try {
-    const provider = new JsonRpcProvider(env.relayerRpcUrl, env.relayerChainId);
-    const data = erc20Interface.encodeFunctionData('balanceOf', [safeAddress]);
-    const raw = await provider.call({
-      to: env.collateralAddress,
-      data,
-    });
-    const [balanceBN] = erc20Interface.decodeFunctionResult('balanceOf', raw) as [BigNumber];
-    const balanceFloat = Number(balanceBN.toString()) / 10 ** USDC_DECIMALS;
-    return NextResponse.json({
-      balance: balanceFloat,
-      raw: balanceBN.toString(),
-      collateralAddress: env.collateralAddress,
-    });
-  } catch (error) {
-    console.error('[api/profile/safe-balance]', error);
-    const message = error instanceof Error ? error.message : 'Unable to fetch Safe balance';
-    return NextResponse.json({ error: message }, { status: 500 });
+    safeAddress = getAddress(safeAddressParam);
+  } catch {
+    return NextResponse.json({ error: 'Invalid Safe address' }, { status: 400 });
   }
+
+  let collateralAddress: string;
+  try {
+    collateralAddress = getAddress(env.collateralAddress);
+  } catch {
+    return NextResponse.json(
+      { error: 'Invalid collateral address configured server-side' },
+      { status: 500 },
+    );
+  }
+
+  const rpcUrls = Array.from(
+    new Set(
+      [env.relayerRpcUrl, DEFAULT_POLYGON_RPC].filter(
+        (url): url is string => Boolean(url && url.length > 0),
+      ),
+    ),
+  );
+
+  let lastErrorMessage: string | null = null;
+
+  for (const rpcUrl of rpcUrls) {
+    try {
+      const provider = getProvider(rpcUrl);
+      const data = erc20Interface.encodeFunctionData('balanceOf', [safeAddress]);
+      const raw = await provider.call({
+        to: collateralAddress,
+        data,
+      });
+      const [balanceBN] = erc20Interface.decodeFunctionResult('balanceOf', raw) as [BigNumber];
+      const balanceFloat = Number(formatUnits(balanceBN, USDC_DECIMALS));
+      return NextResponse.json({
+        balance: balanceFloat,
+        raw: balanceBN.toString(),
+        collateralAddress,
+      });
+    } catch (error) {
+      const sanitizedMessage =
+        error instanceof Error ? sanitizeRpcMessage(error.message) : 'RPC request failed';
+      lastErrorMessage = sanitizedMessage;
+      const label = rpcUrl === DEFAULT_POLYGON_RPC ? 'public' : 'custom';
+      console.error(`[api/profile/safe-balance] ${label} RPC failed`, {
+        message: sanitizedMessage,
+      });
+    }
+  }
+
+  return NextResponse.json(
+    {
+      error:
+        'Safe balance lookup failed across all configured Polygon RPC endpoints. Verify POLYMARKET_RELAYER_RPC_URL or allow outbound access to public Polygon RPC.',
+      meta: lastErrorMessage ? { lastError: lastErrorMessage } : undefined,
+    },
+    { status: 502 },
+  );
 }
 

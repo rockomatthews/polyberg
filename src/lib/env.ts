@@ -16,6 +16,8 @@ const envSchema = z.object({
   POLYMARKET_SAFE_ADDRESS: z.string().optional(),
   POLYMARKET_RELAYER_RPC_URL: z.string().url().optional(),
   POLYMARKET_RELAYER_PRIVATE_KEY: z.string().optional(),
+  POLYMARKET_ORDER_SIGNER_PRIVATE_KEY: z.string().optional(),
+  POLYMARKET_COLLATERAL_ADDRESS: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -59,9 +61,14 @@ export const env = {
   safeAddress: data.POLYMARKET_SAFE_ADDRESS,
   relayerRpcUrl: data.POLYMARKET_RELAYER_RPC_URL,
   relayerPrivateKey: data.POLYMARKET_RELAYER_PRIVATE_KEY,
+  orderSignerPrivateKey:
+    data.POLYMARKET_ORDER_SIGNER_PRIVATE_KEY ?? data.POLYMARKET_RELAYER_PRIVATE_KEY,
+  collateralAddress: data.POLYMARKET_COLLATERAL_ADDRESS ?? '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
 };
 
 export const hasL2Auth = Boolean(env.l2ApiCreds);
 export const hasBuilderSigning = Boolean(env.builderSigner || env.builderLocalCreds);
 export const hasRelayer = Boolean(env.relayerUrl);
+export const hasOrderSigner = Boolean(env.orderSignerPrivateKey);
+export const hasCollateralAddress = Boolean(env.collateralAddress);
 

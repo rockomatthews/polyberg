@@ -13,7 +13,8 @@ import Tooltip from '@mui/material/Tooltip';
 import SearchIcon from '@mui/icons-material/Search';
 import useMediaQuery from '@mui/material/useMediaQuery';
 
-import { signOut, useSession } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 
 import { useSystemStatus } from '@/hooks/useTerminalData';
 
@@ -21,6 +22,16 @@ export function TerminalHeader() {
   const isMobile = useMediaQuery('(max-width:900px)');
   const { data: session } = useSession();
   const { data: status } = useSystemStatus();
+  const router = useRouter();
+  const initials =
+    session?.user?.name?.trim().length
+      ? session.user.name
+          .trim()
+          .split(/\s+/)
+          .slice(0, 2)
+          .map((part) => part[0]?.toUpperCase())
+          .join('') || 'OP'
+      : 'OP';
   const latencyChip =
     status?.latencyMs != null ? `Latency ${status.latencyMs}ms` : 'Latency --';
   const walletBalanceLabel =
@@ -92,7 +103,7 @@ export function TerminalHeader() {
             variant="outlined"
             color={status?.relayerConnected ? 'primary' : 'warning'}
           />
-          <Tooltip title="Operator menu">
+          <Tooltip title={session?.user ? 'Open profile' : 'Sign in to manage profile'}>
             <Avatar
               alt="Operator"
               sx={{
@@ -102,9 +113,15 @@ export function TerminalHeader() {
                 fontSize: '0.85rem',
                 cursor: 'pointer',
               }}
-              onClick={() => signOut()}
+              onClick={() => {
+                if (session?.user) {
+                  router.push('/profile');
+                } else {
+                  router.push('/');
+                }
+              }}
             >
-              {session?.user?.name?.slice(0, 2).toUpperCase() ?? 'OP'}
+              {initials}
             </Avatar>
           </Tooltip>
         </Stack>

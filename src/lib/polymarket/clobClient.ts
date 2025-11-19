@@ -1,3 +1,5 @@
+import { JsonRpcProvider } from '@ethersproject/providers';
+import { Wallet } from '@ethersproject/wallet';
 import { ClobClient, Chain } from '@polymarket/clob-client';
 import { BuilderConfig } from '@polymarket/builder-signing-sdk';
 
@@ -13,10 +15,18 @@ const builderConfig =
       })
     : undefined;
 
+const orderSigner =
+  env.orderSignerPrivateKey
+    ? new Wallet(
+        env.orderSignerPrivateKey,
+        env.relayerRpcUrl ? new JsonRpcProvider(env.relayerRpcUrl, chainId) : undefined,
+      )
+    : undefined;
+
 export const clobClient = new ClobClient(
   env.polymarketApiHost,
   chainId,
-  undefined,
+  orderSigner,
   env.l2ApiCreds,
   undefined,
   undefined,

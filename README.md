@@ -29,6 +29,8 @@ POLYMARKET_RELAYER_CHAIN_ID=137
 POLYMARKET_SAFE_ADDRESS=0xYourSafe
 POLYMARKET_RELAYER_RPC_URL=https://polygon-rpc.com
 POLYMARKET_RELAYER_PRIVATE_KEY=0xyourexecutorprivkey
+# Optional dedicated key for signing CLOB orders (falls back to relayer key)
+POLYMARKET_ORDER_SIGNER_PRIVATE_KEY=0xyourordersignerkey
 
 # Google Auth
 GOOGLE_CLIENT_ID=...

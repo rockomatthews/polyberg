@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server';
 
 import { clobClient } from '@/lib/polymarket/clobClient';
+import { hasL2Auth } from '@/lib/env';
 
 export async function GET() {
+  if (!hasL2Auth) {
+    return NextResponse.json({
+      events: [],
+      meta: { requiresL2Auth: true },
+    });
+  }
+
   try {
     const { trades } = await clobClient.getTradesPaginated(undefined, undefined);
     const events = (trades ?? []).slice(0, 20).map((trade) => ({
@@ -15,7 +23,13 @@ export async function GET() {
     return NextResponse.json({ events });
   } catch (error) {
     console.error('[api/polymarket/activity] Failed to fetch trades', error);
-    return NextResponse.json({ events: [] }, { status: 502 });
+    return NextResponse.json(
+      {
+        events: [],
+        meta: { error: error instanceof Error ? error.message : 'Failed to load activity feed' },
+      },
+      { status: 200 },
+    );
   }
 }
 

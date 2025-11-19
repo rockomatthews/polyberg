@@ -54,9 +54,17 @@ export async function GET() {
     return NextResponse.json({ positions });
   } catch (error) {
     console.error('[api/polymarket/positions] Failed to fetch builder trades', error);
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unable to load builder trades';
     return NextResponse.json(
-      { positions: [], meta: { error: 'Unable to load builder trades' } },
-      { status: 502 },
+      {
+        positions: [],
+        meta: {
+          error: errorMessage,
+          requiresBuilderSigning: !hasBuilderSigning,
+        },
+      },
+      { status: 200 },
     );
   }
 }

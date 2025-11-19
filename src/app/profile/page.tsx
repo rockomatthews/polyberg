@@ -68,10 +68,29 @@ async function loadUser(): Promise<{
   if (!session?.user?.id) {
     redirect('/');
   }
-  await ensureUserRecord(session);
-  const record = await getUserRecord(session.user.id);
-  const safeRecord = await getUserSafe(session.user.id);
-  const history = await listCopilotEntries(session.user.id, 5);
+  let record: UserRecord | null = null;
+  let safeRecord: UserSafeRecord | null = null;
+  let history: CopilotEntry[] = [];
+
+  try {
+    await ensureUserRecord(session);
+    record = await getUserRecord(session.user.id);
+  } catch (error) {
+    console.error('[profile] failed to upsert user record', error);
+  }
+
+  try {
+    safeRecord = await getUserSafe(session.user.id);
+  } catch (error) {
+    console.error('[profile] failed to load user safe', error);
+  }
+
+  try {
+    history = await listCopilotEntries(session.user.id, 5);
+  } catch (error) {
+    console.error('[profile] failed to load copilot history', error);
+  }
+
   return {
     sessionUser: record,
     sessionSafe: safeRecord,

@@ -9,7 +9,11 @@ import { env, hasRelayer } from '@/lib/env';
 
 const erc20Interface = new Interface(['function balanceOf(address owner) view returns (uint256)']);
 const USDC_DECIMALS = 6;
-const DEFAULT_POLYGON_RPC = 'https://polygon-rpc.com';
+const DEFAULT_POLYGON_RPCS = [
+  'https://polygon-rpc.com',
+  'https://rpc.ankr.com/polygon',
+  'https://polygon.llamarpc.com',
+];
 
 const providerCache = new Map<string, JsonRpcProvider>();
 
@@ -60,13 +64,13 @@ export async function GET(request: NextRequest) {
 
   const rpcUrls = Array.from(
     new Set(
-      [env.relayerRpcUrl, DEFAULT_POLYGON_RPC].filter(
+      [env.relayerRpcUrl, ...DEFAULT_POLYGON_RPCS].filter(
         (url): url is string => Boolean(url && url.length > 0),
       ),
     ),
   );
 
-  let lastErrorMessage: string | null = null;
+  const failures: Array<{ rpcUrl: string; message: string }> = [];
 
   for (const rpcUrl of rpcUrls) {
     try {
@@ -86,9 +90,11 @@ export async function GET(request: NextRequest) {
     } catch (error) {
       const sanitizedMessage =
         error instanceof Error ? sanitizeRpcMessage(error.message) : 'RPC request failed';
-      lastErrorMessage = sanitizedMessage;
-      const label = rpcUrl === DEFAULT_POLYGON_RPC ? 'public' : 'custom';
-      console.error(`[api/profile/safe-balance] ${label} RPC failed`, {
+      const label =
+        env.relayerRpcUrl && rpcUrl === env.relayerRpcUrl ? 'custom' : 'public fallback';
+      failures.push({ rpcUrl: label, message: sanitizedMessage });
+      console.error('[api/profile/safe-balance] rpc failed', {
+        rpcUrl: label,
         message: sanitizedMessage,
       });
     }
@@ -98,7 +104,7 @@ export async function GET(request: NextRequest) {
     {
       error:
         'Safe balance lookup failed across all configured Polygon RPC endpoints. Verify POLYMARKET_RELAYER_RPC_URL or allow outbound access to public Polygon RPC.',
-      meta: lastErrorMessage ? { lastError: lastErrorMessage } : undefined,
+      meta: { failures },
     },
     { status: 502 },
   );

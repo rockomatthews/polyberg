@@ -137,9 +137,11 @@ export default async function ProfilePage() {
               </Typography>
               <Stack direction="row" spacing={1} alignItems="center">
                 <SignOutButton />
-                <Button component={Link} href="/" variant="text">
-                  Back to terminal
-                </Button>
+                <Link href="/" passHref legacyBehavior>
+                  <Button component="a" variant="text">
+                    Back to terminal
+                  </Button>
+                </Link>
               </Stack>
             </Stack>
           </CardContent>

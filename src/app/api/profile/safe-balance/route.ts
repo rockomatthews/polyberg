@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { JsonRpcProvider } from '@ethersproject/providers';
+import { JsonRpcProvider, StaticJsonRpcProvider } from '@ethersproject/providers';
 import { Interface } from '@ethersproject/abi';
 import { BigNumber } from '@ethersproject/bignumber';
 import { getAddress } from '@ethersproject/address';
@@ -19,9 +19,11 @@ const providerCache = new Map<string, JsonRpcProvider>();
 
 function getProvider(rpcUrl: string) {
   if (!providerCache.has(rpcUrl)) {
+    const chainId = env.relayerChainId ?? env.polymarketChainId;
+    const network = { chainId, name: `polygon-${chainId}` };
     providerCache.set(
       rpcUrl,
-      new JsonRpcProvider(rpcUrl, env.relayerChainId ?? env.polymarketChainId),
+      new StaticJsonRpcProvider({ url: rpcUrl, timeout: 15_000 }, network),
     );
   }
   return providerCache.get(rpcUrl)!;

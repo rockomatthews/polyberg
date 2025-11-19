@@ -1,3 +1,5 @@
+import { randomUUID } from 'crypto';
+
 import { getDb, hasDatabase } from '@/lib/db';
 
 export type CopilotEntry = {
@@ -17,7 +19,7 @@ async function ensureTable() {
   const db = getDb();
   await db`
     CREATE TABLE IF NOT EXISTS user_copilot_history (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
       prompt TEXT NOT NULL,
       response TEXT NOT NULL,
@@ -32,9 +34,10 @@ export async function logCopilotEntry(userId: string, prompt: string, response: 
   }
   await ensureTable();
   const db = getDb();
+  const id = randomUUID();
   await db`
-    INSERT INTO user_copilot_history (user_id, prompt, response)
-    VALUES (${userId}, ${prompt}, ${response})
+    INSERT INTO user_copilot_history (id, user_id, prompt, response)
+    VALUES (${id}, ${userId}, ${prompt}, ${response})
   `;
 }
 

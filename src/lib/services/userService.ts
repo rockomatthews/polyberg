@@ -1,11 +1,13 @@
 import type { Session } from 'next-auth';
 
-import { db } from '@/lib/db';
+import { getDb, hasDatabase } from '@/lib/db';
 
 export async function ensureUserRecord(session: Session | null) {
-  if (!session?.user?.id) {
+  if (!session?.user?.id || !hasDatabase) {
     return;
   }
+
+  const db = getDb();
 
   await db`
     CREATE TABLE IF NOT EXISTS users (

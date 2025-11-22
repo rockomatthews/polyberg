@@ -72,7 +72,8 @@ export async function GET(request: NextRequest) {
     ),
   );
 
-  const failures: Array<{ rpcUrl: string; message: string }> = [];
+  const failures: Array<{ rpcUrl: string; message: string; code?: string }> = [];
+  let sawCallException = false;
 
   for (const rpcUrl of rpcUrls) {
     try {
@@ -94,12 +95,34 @@ export async function GET(request: NextRequest) {
         error instanceof Error ? sanitizeRpcMessage(error.message) : 'RPC request failed';
       const label =
         env.relayerRpcUrl && rpcUrl === env.relayerRpcUrl ? 'custom' : 'public fallback';
-      failures.push({ rpcUrl: label, message: sanitizedMessage });
+      const code = typeof (error as any)?.code === 'string' ? (error as any).code : undefined;
+      failures.push({ rpcUrl: label, message: sanitizedMessage, code });
+      if (
+        code === 'CALL_EXCEPTION' ||
+        sanitizedMessage.includes('missing revert data in call exception')
+      ) {
+        sawCallException = true;
+      }
       console.error('[api/profile/safe-balance] rpc failed', {
         rpcUrl: label,
         message: sanitizedMessage,
+        code,
       });
     }
+  }
+
+  if (sawCallException) {
+    return NextResponse.json({
+      balance: 0,
+      raw: '0',
+      collateralAddress,
+      meta: {
+        failures,
+        degraded: 'call_exception',
+        message:
+          'Polygon RPC returned CALL_EXCEPTION repeatedly; falling back to zero until a reliable RPC is configured.',
+      },
+    });
   }
 
   return NextResponse.json(

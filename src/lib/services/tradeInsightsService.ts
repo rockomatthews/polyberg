@@ -107,28 +107,25 @@ export async function recordTradeInsight(input: TradeInsightInput) {
       return;
     }
     const index = baseIndex.namespace(pineconeNamespace);
-    await index.upsert(
-      [
-        {
-          id: vectorId,
-          values: embedding,
-          metadata: {
-            userId: input.userId,
-            market: input.market ?? null,
-            tokenId: input.tokenId,
-            side: input.side,
-            priceCents: input.priceCents,
-            sizeThousands: input.sizeThousands,
-            executionMode: input.executionMode,
-            slippage: input.slippage ?? null,
-            timeInForce: input.timeInForce ?? null,
-            orderId: input.orderId ?? null,
-            createdAt: new Date().toISOString(),
-          },
+    await index.upsert([
+      {
+        id: vectorId,
+        values: embedding,
+        metadata: {
+          userId: input.userId,
+          market: input.market ?? null,
+          tokenId: input.tokenId,
+          side: input.side,
+          priceCents: input.priceCents,
+          sizeThousands: input.sizeThousands,
+          executionMode: input.executionMode,
+          slippage: input.slippage ?? null,
+          timeInForce: input.timeInForce ?? null,
+          orderId: input.orderId ?? null,
+          createdAt: new Date().toISOString(),
         },
-      ],
-      pineconeNamespace,
-    );
+      },
+    ]);
   } catch (error) {
     logger.warn('tradeInsights.pinecone.failed', {
       error: error instanceof Error ? error.message : String(error),

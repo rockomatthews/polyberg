@@ -43,11 +43,11 @@ async function loadTradeMemories(userId: string, queryText: string) {
   if (!queryEmbedding) {
     return [];
   }
-  const result = await index.query({
+  const namespace = index.namespace(pineconeNamespace);
+  const result = await namespace.query({
     vector: queryEmbedding,
     topK: 4,
     includeMetadata: true,
-    namespace: pineconeNamespace,
     filter: {
       userId,
     },

@@ -1,16 +1,12 @@
 import { embed } from 'ai';
-import { openai } from '@ai-sdk/openai';
+import { createOpenAI } from '@ai-sdk/openai';
 
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 
 const apiKey = process.env.OPENAI_API_KEY ?? process.env.VERCEL_AI_API_KEY;
 
-const openaiClient = apiKey
-  ? openai({
-      apiKey,
-    })
-  : null;
+const openaiClient = apiKey ? createOpenAI({ apiKey }) : null;
 
 const embeddingModelId = env.embeddingModel ?? 'text-embedding-3-small';
 
@@ -23,8 +19,9 @@ export async function createEmbedding(text: string): Promise<number[] | null> {
   if (!trimmed.length) {
     return null;
   }
+  const model = openaiClient.embedding(embeddingModelId);
   const result = await embed({
-    model: openaiClient.embedding(embeddingModelId),
+    model,
     value: trimmed,
   });
   return result.embedding;

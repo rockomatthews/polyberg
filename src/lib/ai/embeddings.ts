@@ -1,17 +1,14 @@
-import { embed } from 'ai';
-import { createOpenAI } from '@ai-sdk/openai';
+import { embed, openai } from 'ai';
 
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 
 const apiKey = process.env.OPENAI_API_KEY ?? process.env.VERCEL_AI_API_KEY;
 
-const openaiClient = apiKey ? createOpenAI({ apiKey }) : null;
-
 const embeddingModelId = env.embeddingModel ?? 'text-embedding-3-small';
 
 export async function createEmbedding(text: string): Promise<number[] | null> {
-  if (!openaiClient) {
+  if (!apiKey) {
     logger.warn('embeddings.missingApiKey');
     return null;
   }
@@ -19,7 +16,7 @@ export async function createEmbedding(text: string): Promise<number[] | null> {
   if (!trimmed.length) {
     return null;
   }
-  const model = openaiClient.textEmbeddingModel(embeddingModelId);
+  const model = openai.embedding(embeddingModelId, { apiKey });
   const result = await embed({
     model,
     value: trimmed,

@@ -28,17 +28,20 @@ export async function POST() {
     if (!safeAddress) {
       throw new Error('Relayer did not return a Safe address');
     }
+    const taskId =
+      typeof result === 'object' && result && 'taskId' in result
+        ? ((result as { taskId?: string }).taskId ?? null)
+        : null;
+
     await upsertUserSafe(session.user.id, {
       safeAddress,
       deploymentTxHash: result?.transactionHash ?? null,
       status: 'deployed',
       ownershipType: 'per-user',
-      metadata: result
-        ? {
-            taskId: (result as Record<string, unknown>)?.taskId ?? null,
-            relayerUrl: env.relayerUrl ?? null,
-          }
-        : null,
+      metadata: {
+        taskId,
+        relayerUrl: env.relayerUrl ?? null,
+      },
     });
     return NextResponse.json({
       safeAddress,

@@ -25,7 +25,7 @@ async function checkRedis() {
     return { ok: false, message: 'Redis client not configured' };
   }
   const start = Date.now();
-  await redisClient.ping('health');
+  await redisClient.ping();
   return { ok: true, latencyMs: Date.now() - start };
 }
 

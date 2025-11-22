@@ -5,7 +5,7 @@ import { BuilderConfig } from '@polymarket/builder-signing-sdk';
 
 import { env } from '@/lib/env';
 
-const chainId = env.polymarketChainId === Chain.AMOY ? Chain.AMOY : Chain.POLYGON;
+export const polymarketChainId = env.polymarketChainId === Chain.AMOY ? Chain.AMOY : Chain.POLYGON;
 
 const builderConfig =
   env.builderSigner || env.builderLocalCreds
@@ -19,13 +19,13 @@ const orderSigner =
   env.orderSignerPrivateKey
     ? new Wallet(
         env.orderSignerPrivateKey,
-        env.relayerRpcUrl ? new JsonRpcProvider(env.relayerRpcUrl, chainId) : undefined,
+        env.relayerRpcUrl ? new JsonRpcProvider(env.relayerRpcUrl, polymarketChainId) : undefined,
       )
     : undefined;
 
 export const clobClient = new ClobClient(
   env.polymarketApiHost,
-  chainId,
+  polymarketChainId,
   orderSigner,
   env.l2ApiCreds,
   undefined,

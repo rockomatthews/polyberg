@@ -5,7 +5,12 @@ import Image from 'next/image';
 import AppBar from '@mui/material/AppBar';
 import Avatar from '@mui/material/Avatar';
 import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
 import InputAdornment from '@mui/material/InputAdornment';
+import List from '@mui/material/List';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemText from '@mui/material/ListItemText';
+import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Toolbar from '@mui/material/Toolbar';
@@ -15,8 +20,117 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 
 import { useSystemStatus } from '@/hooks/useTerminalData';
+import { searchMarkets } from '@/lib/api/polymarket';
+import type { Market } from '@/lib/api/types';
+import { useTerminalStore } from '@/state/useTerminalStore';
+
+type MarketSearchInputProps = {
+  fullWidth?: boolean;
+};
+
+function MarketSearchInput({ fullWidth }: MarketSearchInputProps) {
+  const [value, setValue] = React.useState('');
+  const [focused, setFocused] = React.useState(false);
+  const [debounced, setDebounced] = React.useState('');
+  const setSelection = useTerminalStore((state) => state.setSelection);
+
+  React.useEffect(() => {
+    const id = setTimeout(() => {
+      setDebounced(value.trim());
+    }, 200);
+    return () => clearTimeout(id);
+  }, [value]);
+
+  const { data: results = [], isFetching } = useQuery({
+    queryKey: ['market-search', debounced],
+    queryFn: () => searchMarkets(debounced),
+    enabled: debounced.length >= 2,
+  });
+
+  const handleSelect = (market: Market) => {
+    if (!market.primaryTokenId) return;
+    setSelection({ marketId: market.conditionId, tokenId: market.primaryTokenId });
+    setValue('');
+    setFocused(false);
+  };
+
+  const showDropdown =
+    focused && (debounced.length >= 2 || value.length >= 2) && (isFetching || results.length > 0);
+
+  return (
+    <Stack
+      sx={{
+        position: 'relative',
+        width: fullWidth ? '100%' : undefined,
+        flex: fullWidth ? '1 1 100%' : '0 0 360px',
+        maxWidth: fullWidth ? '100%' : 360,
+      }}
+    >
+      <TextField
+        placeholder="Search markets, tickers, outcomes"
+        variant="outlined"
+        size="small"
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          setTimeout(() => setFocused(false), 120);
+        }}
+        InputProps={{
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchIcon fontSize="small" />
+            </InputAdornment>
+          ),
+        }}
+      />
+      {showDropdown ? (
+        <Paper
+          elevation={6}
+          sx={{
+            position: 'absolute',
+            top: 'calc(100% + 8px)',
+            left: 0,
+            right: 0,
+            zIndex: 10,
+            maxHeight: 360,
+            overflowY: 'auto',
+          }}
+        >
+          {isFetching && !results.length ? (
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ p: 1.5 }}>
+              <CircularProgress size={16} />
+              <ListItemText primary="Searching markets…" />
+            </Stack>
+          ) : results.length ? (
+            <List disablePadding>
+              {results.map((market) => (
+                <ListItemButton key={market.conditionId} onMouseDown={() => handleSelect(market)}>
+                  <ListItemText
+                    primary={market.question}
+                    secondary={
+                      market.tag
+                        ? `${market.tag} • Bid ${formatPrice(market.bestBid)} / Ask ${formatPrice(market.bestAsk)}`
+                        : `Bid ${formatPrice(market.bestBid)} / Ask ${formatPrice(market.bestAsk)}`
+                    }
+                  />
+                </ListItemButton>
+              ))}
+            </List>
+          ) : (
+            <ListItemText sx={{ p: 1.5 }} primary="No markets found. Try another query." />
+          )}
+        </Paper>
+      ) : null}
+    </Stack>
+  );
+}
+
+const formatPrice = (value: number | null) =>
+  value != null && !Number.isNaN(value) ? `${value.toFixed(2)}¢` : '––';
 
 export function TerminalHeader() {
   const isMobile = useMediaQuery('(max-width:900px)');
@@ -51,21 +165,7 @@ export function TerminalHeader() {
         }}
       >
         <Image src="/logo-terminal.png" alt="Polymarket Terminal" width={164} height={28} priority />
-        {isMobile ? null : (
-          <TextField
-            placeholder="Search markets, tickers, outcomes"
-            variant="outlined"
-            size="small"
-            sx={{ maxWidth: 360, flexShrink: 0 }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-            }}
-          />
-        )}
+        {isMobile ? null : <MarketSearchInput />}
         <Stack
           direction={isMobile ? 'column' : 'row'}
           spacing={1}
@@ -76,21 +176,7 @@ export function TerminalHeader() {
           justifyContent={isMobile ? 'flex-start' : 'flex-end'}
           alignItems={isMobile ? 'stretch' : 'center'}
         >
-          {isMobile ? (
-            <TextField
-              placeholder="Search markets, tickers, outcomes"
-              variant="outlined"
-              size="small"
-              sx={{ width: '100%' }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon fontSize="small" />
-                  </InputAdornment>
-                ),
-              }}
-            />
-          ) : null}
+          {isMobile ? <MarketSearchInput fullWidth /> : null}
           <Chip
             label={latencyChip}
             size={isMobile ? 'small' : 'medium'}

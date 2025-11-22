@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth/next';
 
-import { clobClient } from '@/lib/polymarket/clobClient';
-import { hasBuilderSigning } from '@/lib/env';
+import { authOptions } from '@/lib/auth';
+import { ensureTradingClient } from '@/lib/polymarket/tradingClient';
+import { logger } from '@/lib/logger';
 
 type PositionPayload = {
   market: string;
@@ -11,15 +13,24 @@ type PositionPayload = {
 };
 
 export async function GET() {
-  if (!hasBuilderSigning) {
-    return NextResponse.json({
-      positions: [],
-      meta: { requiresBuilderSigning: true },
-    });
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json(
+      { positions: [], meta: { error: 'Not authenticated' } },
+      { status: 401 },
+    );
+  }
+
+  const ensured = await ensureTradingClient(session.user.id);
+  if (!('client' in ensured)) {
+    return NextResponse.json(
+      { positions: [], meta: { error: ensured.error } },
+      { status: ensured.status },
+    );
   }
 
   try {
-    const { trades } = await clobClient.getBuilderTrades(undefined, undefined);
+    const { trades } = await ensured.client.getBuilderTrades(undefined, undefined);
     const aggregation = new Map<string, PositionPayload>();
 
     trades.forEach((trade) => {
@@ -53,7 +64,9 @@ export async function GET() {
 
     return NextResponse.json({ positions });
   } catch (error) {
-    console.error('[api/polymarket/positions] Failed to fetch builder trades', error);
+    logger.error('positions.fetch.failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     const errorMessage =
       error instanceof Error ? error.message : 'Unable to load builder trades';
     return NextResponse.json(
@@ -61,7 +74,7 @@ export async function GET() {
         positions: [],
         meta: {
           error: errorMessage,
-          requiresBuilderSigning: !hasBuilderSigning,
+          requiresBuilderSigning: true,
         },
       },
       { status: 200 },

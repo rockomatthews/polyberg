@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 
 import { clobClient } from '@/lib/polymarket/clobClient';
 import { env, hasL2Auth, hasRelayer } from '@/lib/env';
+import { logger } from '@/lib/logger';
 
 export async function GET() {
   try {
@@ -19,7 +20,9 @@ export async function GET() {
         });
         walletBalance = Number(balance.balance);
       } catch (balanceError) {
-        console.warn('[api/polymarket/system-status] Balance lookup failed', balanceError);
+        logger.warn('systemStatus.balance.failed', {
+          error: balanceError instanceof Error ? balanceError.message : String(balanceError),
+        });
       }
     }
 
@@ -32,7 +35,9 @@ export async function GET() {
         });
         relayerConnected = response.ok;
       } catch (relayerError) {
-        console.warn('[api/polymarket/system-status] Relayer health check failed', relayerError);
+        logger.warn('systemStatus.relayer.failed', {
+          error: relayerError instanceof Error ? relayerError.message : String(relayerError),
+        });
       }
     }
 
@@ -43,7 +48,9 @@ export async function GET() {
       relayerConnected,
     });
   } catch (error) {
-    console.error('[api/polymarket/system-status] Unexpected failure', error);
+    logger.error('systemStatus.fetch.failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       {
         latencyMs: null,

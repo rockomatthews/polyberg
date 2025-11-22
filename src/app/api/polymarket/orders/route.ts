@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { OrderType, Side } from '@polymarket/clob-client';
 import { z } from 'zod';
+import { getServerSession } from 'next-auth/next';
 
-import { clobClient } from '@/lib/polymarket/clobClient';
-import { hasBuilderSigning, hasL2Auth, hasOrderSigner } from '@/lib/env';
+import { authOptions } from '@/lib/auth';
+import { ensureTradingClient } from '@/lib/polymarket/tradingClient';
+import { recordTradeInsight } from '@/lib/services/tradeInsightsService';
+import { logger } from '@/lib/logger';
 
 const tradeSchema = z.object({
   tokenId: z.string().min(1),
@@ -16,16 +19,21 @@ const tradeSchema = z.object({
   marketId: z.string().optional(),
 });
 
+type SubmitPayload = z.infer<typeof tradeSchema>;
+
 export async function GET() {
-  if (!hasL2Auth) {
-    return NextResponse.json({
-      orders: [],
-      meta: { requiresL2Auth: true },
-    });
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Not authenticated', orders: [] }, { status: 401 });
+  }
+
+  const ensured = await ensureTradingClient(session.user.id);
+  if (!('client' in ensured)) {
+    return NextResponse.json({ error: ensured.error }, { status: ensured.status });
   }
 
   try {
-    const openOrders = await clobClient.getOpenOrders();
+    const openOrders = await ensured.client.getOpenOrders();
     const orders = openOrders.map((order) => ({
       id: order.id,
       market: order.market,
@@ -38,52 +46,69 @@ export async function GET() {
 
     return NextResponse.json({ orders });
   } catch (error) {
-    console.error('[api/polymarket/orders] Failed to load orders', error);
+    logger.error('orders.fetch.failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json({ orders: [] }, { status: 502 });
   }
 }
 
 export async function POST(request: NextRequest) {
-  if (!hasOrderSigner) {
-    return NextResponse.json(
-      { error: 'Order signer key not configured. Cannot submit trades.' },
-      { status: 400 },
-    );
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
-  if (!hasL2Auth || !hasBuilderSigning) {
-    return NextResponse.json(
-      {
-        error:
-          'Polymarket builder auth (L2 API key + builder signer) is required before trading.',
-      },
-      { status: 400 },
-    );
+
+  const ensured = await ensureTradingClient(session.user.id);
+  if (!('client' in ensured)) {
+    return NextResponse.json({ error: ensured.error }, { status: ensured.status });
   }
+
+  let parsedPayload: SubmitPayload | null = null;
 
   try {
     const json = await request.json();
-    const payload = tradeSchema.parse(json);
+    parsedPayload = tradeSchema.parse(json);
 
-    const limitPrice = payload.price / 100;
-    const sizeInContracts = payload.size * 1_000; // slider is expressed in "k"
-    const deferExec = payload.executionMode === 'passive';
+    const limitPrice = parsedPayload.price / 100;
+    const sizeInContracts = parsedPayload.size * 1_000; // slider is expressed in "k"
+    const deferExec = parsedPayload.executionMode === 'passive';
 
-    const result = await clobClient.createAndPostOrder(
+    const result = await ensured.client.createAndPostOrder(
       {
-        tokenID: payload.tokenId,
+        tokenID: parsedPayload.tokenId,
         price: limitPrice,
         size: sizeInContracts,
-        side: payload.side,
+        side: parsedPayload.side,
       },
       undefined,
       OrderType.GTC,
       deferExec,
     );
 
-    return NextResponse.json({
+    const responsePayload = {
       success: true,
       order: result,
+    };
+
+    recordTradeInsight({
+      userId: session.user.id,
+      market: parsedPayload.marketId ?? null,
+      tokenId: parsedPayload.tokenId,
+      side: parsedPayload.side,
+      priceCents: parsedPayload.price,
+      sizeThousands: parsedPayload.size,
+      executionMode: parsedPayload.executionMode,
+      slippage: parsedPayload.slippage,
+      timeInForce: parsedPayload.timeInForce,
+      orderId: result?.orderID ?? result?.id ?? null,
+    }).catch((error) => {
+      logger.warn('orders.tradeInsight.failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     });
+
+    return NextResponse.json(responsePayload);
   } catch (error) {
     const message =
       error instanceof z.ZodError
@@ -91,7 +116,14 @@ export async function POST(request: NextRequest) {
         : error instanceof Error
           ? error.message
           : 'Unable to submit trade';
-    console.error('[api/polymarket/orders] Trade submission failed', error);
+    logger.error('orders.submit.failed', {
+      error: error instanceof Error ? error.message : String(error),
+      payload: {
+        tokenId: parsedPayload?.tokenId,
+        side: parsedPayload?.side,
+        price: parsedPayload?.price,
+      },
+    });
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

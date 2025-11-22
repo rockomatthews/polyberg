@@ -6,6 +6,7 @@ import { getAddress } from '@ethersproject/address';
 import { formatUnits } from '@ethersproject/units';
 
 import { env, hasRelayer } from '@/lib/env';
+import { logger } from '@/lib/logger';
 
 const erc20Interface = new Interface(['function balanceOf(address owner) view returns (uint256)']);
 const USDC_DECIMALS = 6;
@@ -103,8 +104,8 @@ export async function GET(request: NextRequest) {
       ) {
         sawCallException = true;
       }
-      console.error('[api/profile/safe-balance] rpc failed', {
-        rpcUrl: label,
+      logger.error('safeBalance.rpc.failed', {
+        rpc: label,
         message: sanitizedMessage,
         code,
       });

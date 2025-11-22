@@ -34,6 +34,13 @@ import {
   listCopilotEntries,
   type CopilotEntry,
 } from '@/lib/services/copilotService';
+import {
+  getUserCredentialStatus,
+  type UserCredentialStatus,
+} from '@/lib/services/userCredentialsService';
+import { CredentialPanel } from '@/components/profile/CredentialPanel';
+import { OnboardingWizard } from '@/components/profile/OnboardingWizard';
+import { logger } from '@/lib/logger';
 
 type StatusChipProps = {
   label: string;
@@ -63,10 +70,24 @@ async function loadUser(): Promise<{
   copilotHistory: CopilotEntry[];
   sessionEmail?: string;
   sessionName?: string;
+  credentialStatus: UserCredentialStatus;
 }> {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     redirect('/');
+  }
+  let credentialStatus: UserCredentialStatus = {
+    hasBuilderSigner: false,
+    hasL2Creds: false,
+    hasRelayerSigner: false,
+  };
+  try {
+    const status = await getUserCredentialStatus(session.user.id);
+    credentialStatus = status.status;
+  } catch (error) {
+    logger.error('profile.credentials.failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
   let record: UserRecord | null = null;
   let safeRecord: UserSafeRecord | null = null;
@@ -76,19 +97,25 @@ async function loadUser(): Promise<{
     await ensureUserRecord(session);
     record = await getUserRecord(session.user.id);
   } catch (error) {
-    console.error('[profile] failed to upsert user record', error);
+    logger.error('profile.userRecord.failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   try {
     safeRecord = await getUserSafe(session.user.id);
   } catch (error) {
-    console.error('[profile] failed to load user safe', error);
+    logger.error('profile.userSafe.failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   try {
     history = await listCopilotEntries(session.user.id, 5);
   } catch (error) {
-    console.error('[profile] failed to load copilot history', error);
+    logger.error('profile.copilotHistory.failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   return {
@@ -97,18 +124,19 @@ async function loadUser(): Promise<{
     copilotHistory: history,
     sessionEmail: session.user.email ?? record?.email ?? undefined,
     sessionName: session.user.name ?? record?.name ?? undefined,
+    credentialStatus,
   };
 }
 
 export default async function ProfilePage() {
-  const { sessionUser, sessionSafe, copilotHistory, sessionEmail, sessionName } =
+  const { sessionUser, sessionSafe, copilotHistory, sessionEmail, sessionName, credentialStatus } =
     await loadUser();
 
   const builderStatuses = [
-    { label: 'Builder signer', ok: hasBuilderSigning },
-    { label: 'L2 API creds', ok: hasL2Auth },
-    { label: 'Order signer', ok: hasOrderSigner },
-    { label: 'Relayer URL', ok: hasRelayer },
+    { label: 'Builder signer', ok: hasBuilderSigning || credentialStatus.hasBuilderSigner },
+    { label: 'L2 API creds', ok: hasL2Auth || credentialStatus.hasL2Creds },
+    { label: 'Order signer', ok: hasOrderSigner || credentialStatus.hasRelayerSigner },
+    { label: 'Relayer URL', ok: hasRelayer || credentialStatus.hasRelayerSigner },
   ];
 
   const safeAddress = env.safeAddress ?? 'Not configured';
@@ -164,8 +192,11 @@ export default async function ProfilePage() {
           </CardContent>
         </Card>
 
+        <CredentialPanel />
+
         <SafePanel
-          initialSafeAddress={sessionSafe?.safe_address ?? env.safeAddress ?? null}
+          initialUserSafe={sessionSafe}
+          sharedSafeAddress={env.safeAddress ?? null}
           canDeploy={hasRelayer}
           collateralAddress={env.collateralAddress}
         />
@@ -212,57 +243,20 @@ export default async function ProfilePage() {
         <Card variant="outlined">
           <CardContent>
             <Typography variant="h6" gutterBottom>
-              Builder Onboarding Tutorial
+              Builder Onboarding Wizard
             </Typography>
             <Typography variant="body2" color="text.secondary" paragraph>
-              Every trader who wants their own Safe must first be accepted into the Polymarket Builder
-              Program. Share these steps with customers so they can gather the required credentials and
-              fund their personal Safe.
+              Track the end-to-end checklist every trader must complete before firing gasless snipes.
+              Steps mark themselves complete as you configure credentials, deploy a Safe, and pass the
+              health check.
             </Typography>
-            <Box
-              component="ol"
-              sx={{
-                pl: 3,
-                '& li': {
-                  mb: 1.5,
-                  fontSize: '0.95rem',
-                  lineHeight: 1.5,
-                },
-              }}
-            >
-              <li>
-                Apply for builder access at{' '}
-                <Link href="https://docs.polymarket.com/developers/builders/overview" target="_blank">
-                  docs.polymarket.com
-                </Link>{' '}
-                and wait for approval (takes a few days).
-              </li>
-              <li>
-                Once approved, visit <strong>polymarket.com → Settings → Builder Program</strong> to
-                create a Builder API key or configure a remote signer. This becomes the{' '}
-                <code>POLYMARKET_BUILDER_SIGNER_URL/TOKEN</code> pair.
-              </li>
-              <li>
-                Generate L2 API credentials (key / secret / passphrase) from the same menu. These map to
-                <code>POLYMARKET_L2_API_* </code> and allow the user to read balances and place orders.
-              </li>
-              <li>
-                Deploy a Safe via the “Deploy Safe” action (coming soon here) or manually through the
-                builder relayer. Keep the Safe address handy; it’s where collateral will live.
-              </li>
-              <li>
-                Fund the Safe by withdrawing USDC from Polymarket (or any Polygon wallet) directly to the
-                Safe address. No gas is required for execution—the relayer covers that part.
-              </li>
-              <li>
-                Paste the signer URL/token + L2 credentials into this terminal (future per-user inputs) so
-                trades execute under that user’s identity and balances stay segregated.
-              </li>
-            </Box>
-            <Typography variant="body2" color="text.secondary">
-              Until the per-user forms ship, operators can collect these details out-of-band and load them
-              into your own signing infrastructure.
-            </Typography>
+            <OnboardingWizard
+              hasBuilderSigner={hasBuilderSigning || credentialStatus.hasBuilderSigner}
+              hasL2Creds={hasL2Auth || credentialStatus.hasL2Creds}
+              hasRelayerSigner={credentialStatus.hasRelayerSigner}
+              hasSafe={Boolean(sessionSafe?.safe_address)}
+              safeStatus={sessionSafe?.status}
+            />
           </CardContent>
         </Card>
       </Stack>

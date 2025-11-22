@@ -1,17 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { clobClient } from '@/lib/polymarket/clobClient';
+import { logger } from '@/lib/logger';
 
-const clampLimit = (value: number) => Math.min(Math.max(value, 1), 20);
+const clampLimit = (value: number) => Math.min(Math.max(value, 1), 25);
+
+function normalize(text?: string | null) {
+  return text?.toLowerCase().trim() ?? '';
+}
+
+function matchesQuery(query: string, market: any) {
+  if (!query.length) return true;
+  const haystack = [
+    market.question,
+    market.tags?.join(' '),
+    market.market_slug,
+    market.tokens?.map((token: any) => token.outcome).join(' '),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return haystack.includes(query);
+}
 
 export async function GET(request: NextRequest) {
   try {
-    const rawLimit = Number(request.nextUrl.searchParams.get('limit') ?? '8');
+    const params = request.nextUrl.searchParams;
+    const rawLimit = Number(params.get('limit') ?? '8');
     const limit = clampLimit(Number.isNaN(rawLimit) ? 8 : rawLimit);
+    const query = normalize(params.get('q'));
 
     const payload = await clobClient.getMarkets();
-    const sorted = payload.data.filter((market) => market.enable_order_book && market.active);
-    const selected = sorted.slice(0, limit);
+    const eligible = payload.data.filter((market) => market.enable_order_book && market.active);
+    const filtered = eligible.filter((market) => matchesQuery(query, market));
+    const selected = filtered.slice(0, limit);
 
     const markets = [];
     for (const market of selected) {
@@ -29,7 +51,10 @@ export async function GET(request: NextRequest) {
           const askDepth = (summary.asks ?? []).slice(0, 3).reduce((acc, level) => acc + Number(level.size), 0);
           liquidity = Number((bidDepth + askDepth).toFixed(2));
         } catch (error) {
-          console.warn('[api/polymarket/markets] Failed to fetch orderbook', error);
+          logger.warn('markets.orderbook.failed', {
+            tokenId: primaryToken?.token_id,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       }
 
@@ -56,7 +81,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ markets });
   } catch (error) {
-    console.error('[api/polymarket/markets] Unexpected error', error);
+    logger.error('markets.fetch.failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: 'Unable to load Polymarket markets' },
       { status: 500 },

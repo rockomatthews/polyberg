@@ -38,6 +38,7 @@ POLYMARKET_COLLATERAL_ADDRESS=0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 NEXTAUTH_SECRET=generate_a_strong_random_string
+USER_CREDENTIALS_KEY=32_byte_hex_for_encrypting_per_user_creds
 # Neon Postgres
 DATABASE_URL=postgresql://<user>:<password>@<host>/<db>?sslmode=require
 # Upstash Redis
@@ -45,6 +46,13 @@ UPSTASH_REDIS_REST_URL=...
 UPSTASH_REDIS_REST_TOKEN=...
 # Vercel AI Gateway
 VERCEL_AI_API_KEY=...
+# Pinecone + embeddings (optional, powers Strategy Copilot memory)
+PINECONE_API_KEY=...
+PINECONE_INDEX=polymarket-snipes
+PINECONE_NAMESPACE=snipes
+AI_EMBEDDING_MODEL=text-embedding-3-small
+# Structured logging (optional)
+LOGTAIL_SOURCE_TOKEN=your-logtail-token
 ```
 
 All env vars are validated at boot via `src/lib/env.ts`. Missing optional values simply disable the dependent widgets (positions, blotter, etc.) until credentials are supplied.
@@ -68,7 +76,11 @@ Under the hood we follow the same patterns showcased in Polymarket’s repo—se
 
 - **Neon Postgres**: provisioned via Vercel Storage. `DATABASE_URL` powers `@neondatabase/serverless` in `src/lib/db.ts`, and `ensureUserRecord` (`src/lib/services/userService.ts`) keeps a `users` table in sync when traders sign in.
 - **Upstash Redis**: provisioned alongside Neon. `UPSTASH_REDIS_REST_URL`/`TOKEN` feed `src/lib/redis.ts`, and the market/order book fetchers will cache results for a few seconds to reduce load on the Polymarket APIs.
-- **Vercel AI Gateway**: `VERCEL_AI_API_KEY` drives `/api/ai/suggestions`, which powers the upcoming “Strategy Copilot” surface.
+- **Encrypted per-user creds**: the Profile page surfaces a credential form that encrypts each trader’s signer/L2/relayer keys with `USER_CREDENTIALS_KEY` (falls back to `NEXTAUTH_SECRET`). These records live in Neon and are loaded whenever a user places orders.
+- **Trader telemetry**: `/api/profile/safe-balance` now logs per-RPC failures and degrades gracefully when Polygon RPC endpoints revert; Safe deployments capture tx hashes + metadata for auditability.
+- **AI memory**: set `VERCEL_AI_API_KEY` plus the Pinecone variables to stream every filled trade into a vector index. Strategy Copilot queries that memory alongside the active watchlist/positions to recommend fresh snipes.
+- **Structured logging**: point `LOGTAIL_SOURCE_TOKEN` (or any hosted Logtail-compatible source) to ship every relayer/RPC/AI error with consistent metadata.
+- **Unified health**: `/api/health` probes the database, Redis, relayer, Polygon RPC, AI gateway, and Pinecone. The header’s “Builder Connectivity” chips still map env + per-user status, but ops can curl the new health endpoint for automation.
 
 ## Local Development
 

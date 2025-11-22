@@ -49,6 +49,22 @@ export async function fetchMarkets(): Promise<Market[]> {
   }
 }
 
+export async function searchMarkets(query: string): Promise<Market[]> {
+  const trimmed = query.trim();
+  if (!trimmed) {
+    return [];
+  }
+  try {
+    const data = await apiGet<{ markets: Market[] }>(
+      `/api/polymarket/markets?q=${encodeURIComponent(trimmed)}&limit=15`,
+    );
+    return data.markets;
+  } catch (error) {
+    console.warn('[api] searchMarkets failed', error);
+    return [];
+  }
+}
+
 export async function fetchOrderBook(tokenId: string | null): Promise<OrderBookSnapshot | null> {
   if (!tokenId) {
     return null;
@@ -85,13 +101,26 @@ export async function fetchOrderBook(tokenId: string | null): Promise<OrderBookS
   }
 }
 
-export async function fetchPositions(): Promise<Position[]> {
+type PositionsResponse = {
+  positions: Position[];
+  meta?: {
+    error?: string;
+    requiresBuilderSigning?: boolean;
+  };
+};
+
+export async function fetchPositions(): Promise<PositionsResponse> {
   try {
-    const data = await apiGet<{ positions: Position[] }>('/api/polymarket/positions');
-    return data.positions;
+    return await apiGet<PositionsResponse>('/api/polymarket/positions');
   } catch (error) {
     console.warn('[api] fetchPositions failed', error);
-    return [];
+    return {
+      positions: [],
+      meta: {
+        error: error instanceof Error ? error.message : 'Failed to load positions',
+        requiresBuilderSigning: true,
+      },
+    };
   }
 }
 

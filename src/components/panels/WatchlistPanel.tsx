@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Alert from '@mui/material/Alert';
 import Chip from '@mui/material/Chip';
 import LinearProgress from '@mui/material/LinearProgress';
 import Skeleton from '@mui/material/Skeleton';
@@ -43,7 +44,8 @@ export function WatchlistPanel() {
   const markets = data ?? [];
   const selectedMarketId = useTerminalStore((state) => state.selectedMarketId);
   const setSelection = useTerminalStore((state) => state.setSelection);
-  const { watchlist, toggleWatchlist } = useUserWatchlist();
+  const { watchlist, toggleWatchlist, isError } = useUserWatchlist();
+  const [favoritesOnly, setFavoritesOnly] = React.useState(false);
 
   const defaultMarket = React.useMemo(
     () => (data ?? []).find((market) => market.primaryTokenId),
@@ -65,13 +67,37 @@ export function WatchlistPanel() {
     return [...favorites, ...others];
   }, [markets, watchlist]);
 
+  const displayMarkets = React.useMemo(() => {
+    if (favoritesOnly) {
+      return sortedMarkets.filter((market) => watchlist.includes(market.conditionId));
+    }
+    return sortedMarkets.length ? sortedMarkets : markets;
+  }, [favoritesOnly, sortedMarkets, markets, watchlist]);
+
   return (
     <PanelCard title="Watchlist" subtitle="Markets">
       <Stack spacing={1.5}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center">
+          <Typography variant="caption" color="text.secondary">
+            {watchlist.length} favorites
+          </Typography>
+          <Chip
+            size="small"
+            label="Favorites only"
+            variant={favoritesOnly ? 'filled' : 'outlined'}
+            color={favoritesOnly ? 'primary' : 'default'}
+            onClick={() => setFavoritesOnly((prev) => !prev)}
+          />
+        </Stack>
+        {isError ? (
+          <Alert severity="warning" variant="outlined">
+            Unable to load your watchlist. Refresh or check your session.
+          </Alert>
+        ) : null}
         {isFetching && !markets.length ? (
           <Skeleton variant="rounded" height={140} />
         ) : (
-          (sortedMarkets.length ? sortedMarkets : markets).map((market) => {
+          displayMarkets.map((market) => {
             const isActive = market.conditionId === selectedMarketId;
             const spreadLabel =
               market.spread != null ? `${market.spread.toFixed(2)}¢` : '––';
@@ -135,9 +161,14 @@ export function WatchlistPanel() {
             );
           })
         )}
+        {favoritesOnly && displayMarkets.length === 0 ? (
+          <Typography variant="caption" color="text.secondary">
+            No starred markets yet. Click the star icon to pin favorites.
+          </Typography>
+        ) : null}
         {!isFetching && watchlist.length === 0 ? (
           <Typography variant="caption" color="text.secondary">
-            Tap the star icon to build a personalized watchlist.
+            Tap the star icon or use the search bar to build a personalized watchlist.
           </Typography>
         ) : null}
       </Stack>

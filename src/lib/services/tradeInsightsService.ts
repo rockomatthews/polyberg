@@ -107,23 +107,25 @@ export async function recordTradeInsight(input: TradeInsightInput) {
       return;
     }
     const index = baseIndex.namespace(pineconeNamespace);
+    const metadata: Record<string, string | number | boolean | string[]> = {
+      userId: input.userId,
+      tokenId: input.tokenId,
+      side: input.side,
+      priceCents: input.priceCents,
+      sizeThousands: input.sizeThousands,
+      executionMode: input.executionMode,
+      createdAt: new Date().toISOString(),
+    };
+    if (input.market) metadata.market = input.market;
+    if (input.slippage != null) metadata.slippage = input.slippage;
+    if (input.timeInForce != null) metadata.timeInForce = input.timeInForce;
+    if (input.orderId) metadata.orderId = input.orderId;
+
     await index.upsert([
       {
         id: vectorId,
         values: embedding,
-        metadata: {
-          userId: input.userId,
-          market: input.market ?? undefined,
-          tokenId: input.tokenId,
-          side: input.side,
-          priceCents: input.priceCents,
-          sizeThousands: input.sizeThousands,
-          executionMode: input.executionMode,
-          slippage: input.slippage ?? undefined,
-          timeInForce: input.timeInForce ?? undefined,
-          orderId: input.orderId ?? undefined,
-          createdAt: new Date().toISOString(),
-        },
+        metadata,
       },
     ]);
   } catch (error) {

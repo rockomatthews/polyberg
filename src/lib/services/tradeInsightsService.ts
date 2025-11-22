@@ -102,10 +102,11 @@ export async function recordTradeInsight(input: TradeInsightInput) {
       return;
     }
 
-    const index = getPineconeIndex();
-    if (!index) {
+    const baseIndex = getPineconeIndex();
+    if (!baseIndex) {
       return;
     }
+    const index = baseIndex.namespace(pineconeNamespace);
     await index.upsert(
       [
         {

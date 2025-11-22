@@ -19,7 +19,7 @@ export async function createEmbedding(text: string): Promise<number[] | null> {
   if (!trimmed.length) {
     return null;
   }
-  const model = openaiClient.embedding(embeddingModelId);
+  const model = openaiClient.textEmbeddingModel(embeddingModelId);
   const result = await embed({
     model,
     value: trimmed,

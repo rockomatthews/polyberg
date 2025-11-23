@@ -1,7 +1,5 @@
 import { getDb, hasDatabase } from '@/lib/db';
 
-const TABLE_NAME = 'user_watchlist';
-
 async function ensureTable() {
   if (!hasDatabase) {
     return;

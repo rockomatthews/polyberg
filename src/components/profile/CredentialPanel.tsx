@@ -318,17 +318,3 @@ function StatusPill({ label, ok }: StatusPillProps) {
   );
 }
 
-type SectionHeaderProps = { title: string; description: string };
-
-function SectionHeader({ title, description }: SectionHeaderProps) {
-  return (
-    <div>
-      <Typography variant="subtitle2">{title}</Typography>
-      <Typography variant="caption" color="text.secondary">
-        {description}
-      </Typography>
-    </div>
-  );
-}
-
-

@@ -10,8 +10,6 @@ export type CopilotEntry = {
   created_at: string;
 };
 
-const TABLE = 'user_copilot_history';
-
 async function ensureTable() {
   if (!hasDatabase) {
     return;

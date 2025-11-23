@@ -7,6 +7,7 @@ import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
 
 import { useHealthStatus } from '@/hooks/useTerminalData';
+import type { HealthResponse } from '@/lib/api/types';
 
 type BuilderStatus = {
   label: string;

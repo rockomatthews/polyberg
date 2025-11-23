@@ -4,7 +4,6 @@ import {
   HealthResponse,
   Market,
   OrderBookSnapshot,
-  OrderEvent,
   OrdersResponse,
   Position,
   SystemStatus,

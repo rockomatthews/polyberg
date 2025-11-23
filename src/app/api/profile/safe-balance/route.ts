@@ -37,6 +37,14 @@ function sanitizeRpcMessage(message: string) {
   return message;
 }
 
+function extractErrorCode(error: unknown): string | undefined {
+  if (error && typeof error === 'object' && 'code' in error) {
+    const value = (error as { code?: unknown }).code;
+    return typeof value === 'string' ? value : undefined;
+  }
+  return undefined;
+}
+
 export async function GET(request: NextRequest) {
   if (!hasRelayer) {
     return NextResponse.json({ error: 'Relayer URL not configured' }, { status: 400 });
@@ -96,7 +104,7 @@ export async function GET(request: NextRequest) {
         error instanceof Error ? sanitizeRpcMessage(error.message) : 'RPC request failed';
       const label =
         env.relayerRpcUrl && rpcUrl === env.relayerRpcUrl ? 'custom' : 'public fallback';
-      const code = typeof (error as any)?.code === 'string' ? (error as any).code : undefined;
+      const code = extractErrorCode(error);
       failures.push({ rpcUrl: label, message: sanitizedMessage, code });
       if (
         code === 'CALL_EXCEPTION' ||

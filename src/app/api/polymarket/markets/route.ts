@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { clobClient } from '@/lib/polymarket/clobClient';
 import { logger } from '@/lib/logger';
+import type { Market } from '@/lib/api/types';
 
 const clampLimit = (value: number) => Math.min(Math.max(value, 1), 25);
 
@@ -9,13 +10,35 @@ function normalize(text?: string | null) {
   return text?.toLowerCase().trim() ?? '';
 }
 
-function matchesQuery(query: string, market: any) {
+type ClobToken = {
+  token_id?: string;
+  outcome?: string;
+};
+
+type ClobMarket = {
+  question: string;
+  tags?: string[];
+  market_slug: string;
+  tokens?: ClobToken[];
+  enable_order_book: boolean;
+  active: boolean;
+  condition_id: string;
+  icon?: string | null;
+  image?: string | null;
+  end_date_iso?: string | null;
+};
+
+function matchesQuery(query: string, market: ClobMarket) {
   if (!query.length) return true;
+  const tokenOutcomes = (market.tokens ?? [])
+    .map((token) => token.outcome ?? '')
+    .filter(Boolean)
+    .join(' ');
   const haystack = [
     market.question,
     market.tags?.join(' '),
     market.market_slug,
-    market.tokens?.map((token: any) => token.outcome).join(' '),
+    tokenOutcomes,
   ]
     .filter(Boolean)
     .join(' ')
@@ -31,11 +54,12 @@ export async function GET(request: NextRequest) {
     const query = normalize(params.get('q'));
 
     const payload = await clobClient.getMarkets();
-    const eligible = payload.data.filter((market) => market.enable_order_book && market.active);
+    const marketsResponse = payload.data as ClobMarket[];
+    const eligible = marketsResponse.filter((market) => market.enable_order_book && market.active);
     const filtered = eligible.filter((market) => matchesQuery(query, market));
     const selected = filtered.slice(0, limit);
 
-    const markets = [];
+    const markets: Market[] = [];
     for (const market of selected) {
       const primaryToken = market.tokens?.[0];
       let bestBid: number | null = null;
@@ -64,7 +88,7 @@ export async function GET(request: NextRequest) {
         slug: market.market_slug,
         icon: market.icon ?? market.image ?? null,
         tag: market.tags?.[0] ?? null,
-        endDate: market.end_date_iso,
+        endDate: market.end_date_iso ?? null,
         primaryTokenId: primaryToken?.token_id ?? null,
         secondaryTokenId: market.tokens?.[1]?.token_id ?? null,
         primaryOutcome: primaryToken?.outcome ?? null,

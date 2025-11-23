@@ -41,15 +41,15 @@ const formatLiquidity = (value: number | null) => {
 
 export function WatchlistPanel() {
   const { data, isFetching } = useMarketsData();
-  const markets = data ?? [];
+  const markets = React.useMemo(() => data ?? [], [data]);
   const selectedMarketId = useTerminalStore((state) => state.selectedMarketId);
   const setSelection = useTerminalStore((state) => state.setSelection);
   const { watchlist, toggleWatchlist, isError } = useUserWatchlist();
   const [favoritesOnly, setFavoritesOnly] = React.useState(false);
 
   const defaultMarket = React.useMemo(
-    () => (data ?? []).find((market) => market.primaryTokenId),
-    [data],
+    () => markets.find((market) => market.primaryTokenId),
+    [markets],
   );
 
   React.useEffect(() => {

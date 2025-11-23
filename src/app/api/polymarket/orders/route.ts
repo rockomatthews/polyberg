@@ -29,7 +29,10 @@ export async function GET() {
 
   const ensured = await ensureTradingClient(session.user.id);
   if (!('client' in ensured)) {
-    return NextResponse.json({ error: ensured.error }, { status: ensured.status });
+    return NextResponse.json(
+      { orders: [], meta: { error: ensured.error, status: ensured.status } },
+      { status: ensured.status },
+    );
   }
 
   try {

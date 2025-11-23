@@ -108,7 +108,14 @@ function buildPrompt(params: {
 export async function POST(request: Request) {
   if (!aiKey) {
     logger.error('ai.missingApiKey');
-    return NextResponse.json({ error: 'AI gateway key missing' }, { status: 500 });
+    return NextResponse.json(
+      {
+        text: 'AI suggestions unavailable until VERCEL_AI_API_KEY or OPENAI_API_KEY is configured.',
+        suggestions: [],
+        meta: { error: 'AI gateway key missing' },
+      },
+      { status: 200 },
+    );
   }
 
   const body = await request.json();

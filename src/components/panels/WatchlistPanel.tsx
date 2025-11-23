@@ -74,6 +74,13 @@ export function WatchlistPanel() {
     return sortedMarkets.length ? sortedMarkets : markets;
   }, [favoritesOnly, sortedMarkets, markets, watchlist]);
 
+  const autoMarkets = React.useMemo(() => {
+    if (watchlist.length > 0) {
+      return [];
+    }
+    return markets.slice(0, 3);
+  }, [markets, watchlist]);
+
   return (
     <PanelCard title="Watchlist" subtitle="Markets">
       <Stack spacing={1.5}>
@@ -92,6 +99,12 @@ export function WatchlistPanel() {
         {isError ? (
           <Alert severity="warning" variant="outlined">
             Unable to load your watchlist. Refresh or check your session.
+          </Alert>
+        ) : null}
+        {autoMarkets.length > 0 ? (
+          <Alert severity="info" variant="outlined">
+            Showing the top {autoMarkets.length} trending markets from Polymarket. Star any of them
+            to pin to your personal watchlist.
           </Alert>
         ) : null}
         {isFetching && !markets.length ? (
@@ -170,6 +183,38 @@ export function WatchlistPanel() {
           <Typography variant="caption" color="text.secondary">
             Tap the star icon or use the search bar to build a personalized watchlist.
           </Typography>
+        ) : null}
+        {autoMarkets.length > 0 ? (
+          <Stack spacing={1}>
+            {autoMarkets.map((market) => (
+              <Stack
+                key={`auto-${market.conditionId}`}
+                direction="row"
+                spacing={1}
+                alignItems="center"
+                onClick={() =>
+                  setSelection({
+                    marketId: market.conditionId,
+                    tokenId: market.primaryTokenId,
+                  })
+                }
+                sx={{
+                  padding: 1,
+                  borderRadius: 1,
+                  border: '1px dashed rgba(255,255,255,0.2)',
+                  cursor: 'pointer',
+                }}
+              >
+                <Stack flex={1}>
+                  <Typography variant="subtitle2">{market.question}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Auto-suggested · liquidity {formatLiquidity(market.liquidity)}
+                  </Typography>
+                </Stack>
+                <Chip size="small" label="Popular now" color="primary" variant="outlined" />
+              </Stack>
+            ))}
+          </Stack>
         ) : null}
       </Stack>
       <LinearProgress

@@ -5,7 +5,6 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import Link from 'next/link';
 import Button from '@mui/material/Button';
@@ -18,6 +17,7 @@ import {
   ensureUserRecord,
   getUserRecord,
   getUserSafe,
+  upsertUserSafe,
   type UserRecord,
   type UserSafeRecord,
 } from '@/lib/services/userService';
@@ -28,6 +28,7 @@ import {
   hasOrderSigner,
   hasRelayer,
 } from '@/lib/env';
+import { ensureRelayClient, hasRelayClient } from '@/lib/relayer/relayClient';
 import { SignOutButton } from '@/components/auth/SignOutButton';
 import { SafePanel } from '@/components/profile/SafePanel';
 import {
@@ -40,24 +41,8 @@ import {
 } from '@/lib/services/userCredentialsService';
 import { CredentialPanel } from '@/components/profile/CredentialPanel';
 import { OnboardingWizard } from '@/components/profile/OnboardingWizard';
+import { BuilderStatusPanel } from '@/components/profile/BuilderStatusPanel';
 import { logger } from '@/lib/logger';
-
-type StatusChipProps = {
-  label: string;
-  ok: boolean;
-};
-
-function StatusChip({ label, ok }: StatusChipProps) {
-  return (
-    <Chip
-      label={label}
-      color={ok ? 'success' : 'warning'}
-      size="small"
-      variant={ok ? 'filled' : 'outlined'}
-      sx={{ mr: 1, mb: 1 }}
-    />
-  );
-}
 
 function formatTimestamp(timestamp?: string) {
   if (!timestamp) return '—';
@@ -110,6 +95,36 @@ async function loadUser(): Promise<{
     });
   }
 
+  if (!safeRecord && hasRelayer && hasRelayClient) {
+    try {
+      const client = ensureRelayClient('auto deploy user Safe');
+      const response = await client.deploy();
+      const result = await response.wait();
+      const safeAddress = result?.proxyAddress ?? result?.proxyAddress?.toString();
+      if (safeAddress) {
+        await upsertUserSafe(session.user.id, {
+          safeAddress,
+          deploymentTxHash: result?.transactionHash ?? null,
+          status: 'deployed',
+          ownershipType: 'per-user',
+          metadata: {
+            taskId:
+              typeof result === 'object' && result && 'taskId' in result
+                ? ((result as { taskId?: string }).taskId ?? null)
+                : null,
+            relayerUrl: env.relayerUrl ?? null,
+            autoDeployedAt: new Date().toISOString(),
+          },
+        });
+        safeRecord = await getUserSafe(session.user.id);
+      }
+    } catch (error) {
+      logger.warn('profile.autoSafe.failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   try {
     history = await listCopilotEntries(session.user.id, 5);
   } catch (error) {
@@ -138,8 +153,6 @@ export default async function ProfilePage() {
     { label: 'Order signer', ok: hasOrderSigner || credentialStatus.hasRelayerSigner },
     { label: 'Relayer URL', ok: hasRelayer || credentialStatus.hasRelayerSigner },
   ];
-
-  const safeAddress = env.safeAddress ?? 'Not configured';
 
   return (
     <Container maxWidth="md" sx={{ py: 6 }}>
@@ -184,11 +197,7 @@ export default async function ProfilePage() {
               These toggles reflect the global environment configuration. All traders inherit these
               settings until per-user Safes are deployed.
             </Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap' }}>
-              {builderStatuses.map((status) => (
-                <StatusChip key={status.label} label={status.label} ok={status.ok} />
-              ))}
-            </Box>
+            <BuilderStatusPanel fallbackStatuses={builderStatuses} />
           </CardContent>
         </Card>
 

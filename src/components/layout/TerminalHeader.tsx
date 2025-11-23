@@ -22,7 +22,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 
-import { useSystemStatus } from '@/hooks/useTerminalData';
+import { useHealthStatus, useSystemStatus } from '@/hooks/useTerminalData';
 import { searchMarkets } from '@/lib/api/polymarket';
 import type { Market } from '@/lib/api/types';
 import { useTerminalStore } from '@/state/useTerminalStore';
@@ -36,6 +36,7 @@ function MarketSearchInput({ fullWidth }: MarketSearchInputProps) {
   const [focused, setFocused] = React.useState(false);
   const [debounced, setDebounced] = React.useState('');
   const setSelection = useTerminalStore((state) => state.setSelection);
+  const autoSelectedRef = React.useRef<{ query: string; marketId: string } | null>(null);
 
   React.useEffect(() => {
     const id = setTimeout(() => {
@@ -59,6 +60,26 @@ function MarketSearchInput({ fullWidth }: MarketSearchInputProps) {
 
   const showDropdown =
     focused && (debounced.length >= 2 || value.length >= 2) && (isFetching || results.length > 0);
+
+  React.useEffect(() => {
+    if (debounced.length < 2 || results.length === 0) {
+      return;
+    }
+    const first = results[0];
+    if (!first?.primaryTokenId) {
+      return;
+    }
+    const lastSelection = autoSelectedRef.current;
+    if (
+      lastSelection &&
+      lastSelection.query === debounced &&
+      lastSelection.marketId === first.conditionId
+    ) {
+      return;
+    }
+    setSelection({ marketId: first.conditionId, tokenId: first.primaryTokenId });
+    autoSelectedRef.current = { query: debounced, marketId: first.conditionId };
+  }, [debounced, results, setSelection]);
 
   return (
     <Stack
@@ -136,6 +157,7 @@ export function TerminalHeader() {
   const isMobile = useMediaQuery('(max-width:900px)');
   const { data: session } = useSession();
   const { data: status } = useSystemStatus();
+  const { data: health } = useHealthStatus();
   const router = useRouter();
   const initials =
     session?.user?.name?.trim().length
@@ -151,6 +173,12 @@ export function TerminalHeader() {
   const walletBalanceLabel =
     status?.walletBalance != null ? `$${(status.walletBalance / 1_000_000).toFixed(2)}M` : 'Balance --';
   const walletChip = status ? `${status.walletLabel} · ${walletBalanceLabel}` : 'Wallet loading';
+  const relayerStatus = health?.statuses?.relayer;
+  const aiStatus = health?.statuses?.ai;
+  const relayerChipLabel = relayerStatus
+    ? `Relayer · ${relayerStatus.ok ? 'Online' : 'Check config'}`
+    : 'Relayer · pending';
+  const aiChipLabel = aiStatus ? `AI · ${aiStatus.ok ? 'Ready' : 'Missing key'}` : 'AI · pending';
 
   return (
     <AppBar position="static" elevation={0}>
@@ -188,6 +216,18 @@ export function TerminalHeader() {
             size={isMobile ? 'small' : 'medium'}
             variant="outlined"
             color={status?.relayerConnected ? 'primary' : 'warning'}
+          />
+          <Chip
+            label={relayerChipLabel}
+            size={isMobile ? 'small' : 'medium'}
+            variant="outlined"
+            color={relayerStatus?.ok ? 'success' : 'warning'}
+          />
+          <Chip
+            label={aiChipLabel}
+            size={isMobile ? 'small' : 'medium'}
+            variant="outlined"
+            color={aiStatus?.ok ? 'success' : 'warning'}
           />
           <Tooltip title={session?.user ? 'Open profile' : 'Sign in to manage profile'}>
             <Avatar

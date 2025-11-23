@@ -65,3 +65,26 @@ export type SystemStatus = {
   relayerConnected: boolean;
 };
 
+export type OrdersResponse = {
+  orders: OrderEvent[];
+  meta?: {
+    error?: string;
+    status?: number;
+    requiresBuilderSigning?: boolean;
+  };
+};
+
+export type HealthStatus = {
+  ok: boolean;
+  message?: string;
+  latencyMs?: number;
+  status?: number;
+};
+
+export type HealthResponse = {
+  ok: boolean;
+  checkedAt?: string;
+  statuses?: Record<string, HealthStatus>;
+  error?: string;
+};
+

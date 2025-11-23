@@ -30,7 +30,14 @@ export async function GET() {
   const ensured = await ensureTradingClient(session.user.id);
   if (!('client' in ensured)) {
     return NextResponse.json(
-      { orders: [], meta: { error: ensured.error, status: ensured.status } },
+      {
+        orders: [],
+        meta: {
+          error: ensured.error,
+          status: ensured.status,
+          requiresBuilderSigning: ensured.status === 400,
+        },
+      },
       { status: ensured.status },
     );
   }
@@ -52,7 +59,16 @@ export async function GET() {
     logger.error('orders.fetch.failed', {
       error: error instanceof Error ? error.message : String(error),
     });
-    return NextResponse.json({ orders: [] }, { status: 502 });
+    return NextResponse.json(
+      {
+        orders: [],
+        meta: {
+          error: 'Unable to load open orders from builder relayer',
+          requiresBuilderSigning: true,
+        },
+      },
+      { status: 502 },
+    );
   }
 }
 

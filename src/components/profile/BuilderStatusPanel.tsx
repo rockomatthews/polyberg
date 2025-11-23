@@ -6,23 +6,11 @@ import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
 
+import { useHealthStatus } from '@/hooks/useTerminalData';
+
 type BuilderStatus = {
   label: string;
   ok: boolean;
-};
-
-type HealthStatus = {
-  ok: boolean;
-  message?: string;
-  latencyMs?: number;
-  status?: number;
-};
-
-type HealthResponse = {
-  ok: boolean;
-  checkedAt?: string;
-  statuses?: Record<string, HealthStatus>;
-  error?: string;
 };
 
 type BuilderStatusPanelProps = {
@@ -30,29 +18,7 @@ type BuilderStatusPanelProps = {
 };
 
 export function BuilderStatusPanel({ fallbackStatuses }: BuilderStatusPanelProps) {
-  const [health, setHealth] = React.useState<HealthResponse | null>(null);
-  const [healthError, setHealthError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    let mounted = true;
-    fetch('/api/health', { cache: 'no-store' })
-      .then(async (response) => {
-        const json = (await response.json()) as HealthResponse;
-        if (!mounted) return;
-        if (!response.ok) {
-          setHealthError(json.error ?? 'Health endpoint failed');
-        } else {
-          setHealth(json);
-        }
-      })
-      .catch((error) => {
-        if (!mounted) return;
-        setHealthError(error instanceof Error ? error.message : 'Health request failed');
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const { data: health, error } = useHealthStatus();
 
   const healthChecks = React.useMemo(() => {
     const ordering: Array<{ key: keyof NonNullable<HealthResponse['statuses']>; label: string }> = [
@@ -83,6 +49,11 @@ export function BuilderStatusPanel({ fallbackStatuses }: BuilderStatusPanelProps
       .filter(Boolean) as Array<{ label: string; ok: boolean; detail?: string; message?: string }>;
   }, [health]);
 
+  const failingHealth = React.useMemo(
+    () => healthChecks.filter((check) => !check.ok),
+    [healthChecks],
+  );
+
   return (
     <Stack spacing={1.5}>
       <div>
@@ -105,36 +76,46 @@ export function BuilderStatusPanel({ fallbackStatuses }: BuilderStatusPanelProps
         <Typography variant="subtitle2" gutterBottom>
           System health
         </Typography>
-        {healthError ? (
+        {error ? (
           <Alert severity="warning" variant="outlined">
-            {healthError}
+            Unable to load health status. {error instanceof Error ? error.message : 'Unknown error'}
           </Alert>
         ) : (
-          <Stack direction="row" flexWrap="wrap" gap={1}>
-            {healthChecks.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                Checking…
+          <>
+            <Stack direction="row" flexWrap="wrap" gap={1}>
+              {healthChecks.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  Checking…
+                </Typography>
+              ) : (
+                healthChecks.map((check) => (
+                  <Chip
+                    key={check.label}
+                    label={
+                      check.detail ? `${check.label} • ${check.detail}` : check.label
+                    }
+                    color={check.ok ? 'success' : 'warning'}
+                    variant={check.ok ? 'filled' : 'outlined'}
+                    size="small"
+                  />
+                ))
+              )}
+            </Stack>
+            {failingHealth.length ? (
+              <Stack spacing={1} sx={{ mt: 1 }}>
+                {failingHealth.map((check) => (
+                  <Alert key={check.label} severity="warning" variant="outlined">
+                    {check.label}: {check.message ?? 'Configure credentials to enable this service.'}
+                  </Alert>
+                ))}
+              </Stack>
+            ) : health?.checkedAt ? (
+              <Typography variant="caption" color="text.secondary">
+                All systems nominal · updated {new Date(health.checkedAt).toLocaleTimeString()}
               </Typography>
-            ) : (
-              healthChecks.map((check) => (
-                <Chip
-                  key={check.label}
-                  label={
-                    check.detail ? `${check.label} • ${check.detail}` : check.label
-                  }
-                  color={check.ok ? 'success' : 'warning'}
-                  variant={check.ok ? 'filled' : 'outlined'}
-                  size="small"
-                />
-              ))
-            )}
-          </Stack>
+            ) : null}
+          </>
         )}
-        {health?.checkedAt ? (
-          <Typography variant="caption" color="text.secondary">
-            Updated {new Date(health.checkedAt).toLocaleTimeString()}
-          </Typography>
-        ) : null}
       </div>
     </Stack>
   );

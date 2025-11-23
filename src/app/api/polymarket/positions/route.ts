@@ -24,7 +24,13 @@ export async function GET() {
   const ensured = await ensureTradingClient(session.user.id);
   if (!('client' in ensured)) {
     return NextResponse.json(
-      { positions: [], meta: { error: ensured.error } },
+      {
+        positions: [],
+        meta: {
+          error: ensured.error,
+          requiresBuilderSigning: ensured.status === 400,
+        },
+      },
       { status: ensured.status },
     );
   }

@@ -201,7 +201,9 @@ export default async function ProfilePage() {
           </CardContent>
         </Card>
 
-        <CredentialPanel />
+        <div id="builder-credentials">
+          <CredentialPanel />
+        </div>
 
         <SafePanel
           initialUserSafe={sessionSafe}
@@ -265,6 +267,7 @@ export default async function ProfilePage() {
               hasRelayerSigner={credentialStatus.hasRelayerSigner}
               hasSafe={Boolean(sessionSafe?.safe_address)}
               safeStatus={sessionSafe?.status}
+              canDeploySafe={hasRelayer}
             />
           </CardContent>
         </Card>

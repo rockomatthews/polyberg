@@ -4,6 +4,7 @@ import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
 
 import { TerminalHeader } from './TerminalHeader';
+import { HealthHeroBanner } from './HealthHeroBanner';
 import { WatchlistPanel } from '../panels/WatchlistPanel';
 import { DepthLadderPanel } from '../panels/DepthLadderPanel';
 import { TradeTicketPanel } from '../panels/TradeTicketPanel';
@@ -25,6 +26,9 @@ export function AppShell() {
       }}
     >
       <TerminalHeader />
+      <Box sx={{ px: { xs: 1.5, md: 2 }, pt: 1 }}>
+        <HealthHeroBanner />
+      </Box>
       <Box
         component="main"
         sx={{

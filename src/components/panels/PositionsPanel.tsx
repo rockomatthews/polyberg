@@ -10,10 +10,18 @@ import Typography from '@mui/material/Typography';
 import { PanelCard } from './PanelCard';
 import { usePositionsData } from '@/hooks/useTerminalData';
 
+const SAMPLE_POSITIONS = [
+  { market: 'Will BTC hit $100k by 2025?', exposure: 275_000, pnl: 42_000, delta: 'Long' as const },
+  { market: 'US Presidential Election 2024', exposure: 180_000, pnl: -12_500, delta: 'Short' as const },
+  { market: 'Fed cuts rates by March', exposure: 95_000, pnl: 8_750, delta: 'Long' as const },
+] as const;
+
 export function PositionsPanel() {
   const { data, isLoading } = usePositionsData();
   const positions = data?.positions ?? [];
   const meta = data?.meta;
+  const showSample = !positions.length && Boolean(meta?.error);
+  const dataToRender = showSample ? SAMPLE_POSITIONS : positions;
 
   return (
     <PanelCard title="Positions" subtitle="PnL" minHeight={240}>
@@ -22,11 +30,16 @@ export function PositionsPanel() {
           {meta.error}
         </Alert>
       ) : null}
+      {showSample ? (
+        <Alert severity="info" variant="outlined" sx={{ mb: 2 }}>
+          Showing sample positions until builder credentials are connected.
+        </Alert>
+      ) : null}
       {isLoading && !positions.length ? (
         <Skeleton variant="rounded" height={160} />
-      ) : positions.length ? (
+      ) : dataToRender.length ? (
         <Stack spacing={1.5}>
-          {positions.map((pos) => (
+          {dataToRender.map((pos) => (
             <Stack key={pos.market} spacing={0.5}>
               <Stack direction="row" justifyContent="space-between">
                 <Typography variant="subtitle2">{pos.market}</Typography>

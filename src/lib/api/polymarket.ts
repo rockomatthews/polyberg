@@ -1,9 +1,11 @@
 import {
   ActivityEvent,
   AlertRule,
+  HealthResponse,
   Market,
   OrderBookSnapshot,
   OrderEvent,
+  OrdersResponse,
   Position,
   SystemStatus,
 } from './types';
@@ -124,13 +126,18 @@ export async function fetchPositions(): Promise<PositionsResponse> {
   }
 }
 
-export async function fetchOrders(): Promise<OrderEvent[]> {
+export async function fetchOrders(): Promise<OrdersResponse> {
   try {
-    const data = await apiGet<{ orders: OrderEvent[] }>('/api/polymarket/orders');
-    return data.orders;
+    return await apiGet<OrdersResponse>('/api/polymarket/orders');
   } catch (error) {
     console.warn('[api] fetchOrders failed', error);
-    return [];
+    return {
+      orders: [],
+      meta: {
+        error: error instanceof Error ? error.message : 'Failed to load orders',
+        requiresBuilderSigning: true,
+      },
+    };
   }
 }
 
@@ -165,6 +172,15 @@ export async function fetchSystemStatus(): Promise<SystemStatus> {
       walletBalance: null,
       relayerConnected: false,
     };
+  }
+}
+
+export async function fetchHealthStatus(): Promise<HealthResponse | null> {
+  try {
+    return await apiGet<HealthResponse>('/api/health');
+  } catch (error) {
+    console.warn('[api] fetchHealthStatus failed', error);
+    return null;
   }
 }
 

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   fetchActivity,
   fetchAlerts,
+  fetchHealthStatus,
   fetchMarkets,
   fetchOrderBook,
   fetchOrders,
@@ -64,6 +65,14 @@ export function useSystemStatus() {
     queryKey: ['system-status'],
     queryFn: fetchSystemStatus,
     refetchInterval: 3_000,
+  });
+}
+
+export function useHealthStatus() {
+  return useQuery({
+    queryKey: ['health'],
+    queryFn: fetchHealthStatus,
+    refetchInterval: 15_000,
   });
 }
 

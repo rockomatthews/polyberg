@@ -91,6 +91,25 @@ npm run dev
 
 Then open [http://localhost:3000](http://localhost:3000).
 
+### Derive Polymarket L2 API credentials
+
+Private CLOB endpoints (orders, positions, builder trades) require the Polymarket L2 API key triple (key / secret / passphrase). If you have never copied those values from polymarket.com, you can derive them locally with the helper script:
+
+```bash
+# pass your MetaMask private key via env or as an argument
+POLYMARKET_SIGNER_KEY=0xabc123 npm run derive:l2
+# or
+npm run derive:l2 0xabc123
+```
+
+The script performs the `createOrDeriveApiKey` flow against `https://clob.polymarket.com`, prints the three credentials once, and exits. Save them securely and add them to `.env.local`:
+
+```
+POLYMARKET_L2_API_KEY=...
+POLYMARKET_L2_API_SECRET=...
+POLYMARKET_L2_API_PASSPHRASE=...
+```
+
 ## Deployment
 
 Deploy straight to Vercel; the project is App-Directory compatible and uses the built-in MUI Next.js cache provider so zero extra plumbing is required. Remember to mirror your `.env.local` secrets inside the Vercel project settings before promoting to production.

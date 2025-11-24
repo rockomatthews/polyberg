@@ -12,9 +12,15 @@ export async function ensureTradingClient(userId?: string): Promise<TradingClien
   const resolution = await resolveClobClientForUser(userId);
   if (resolution.source === 'env') {
     if (!hasOrderSigner || !hasL2Auth || !hasBuilderSigning) {
+      const missing: string[] = [];
+      if (!hasBuilderSigning) missing.push('POLYMARKET_BUILDER_SIGNER_URL or builder API keys');
+      if (!hasL2Auth) missing.push('POLYMARKET_L2_API_KEY/SECRET/PASSPHRASE');
+      if (!hasOrderSigner) missing.push('POLYMARKET_ORDER_SIGNER_PRIVATE_KEY');
       return {
         error:
-          'Global builder credentials missing. Configure POLYMARKET_* env vars or add per-user credentials.',
+          missing.length > 0
+            ? `Global builder credentials missing: ${missing.join(', ')}`
+            : 'Global builder credentials missing. Configure POLYMARKET_* env vars or add per-user credentials.',
         status: 400,
       };
     }

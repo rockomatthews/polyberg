@@ -35,24 +35,32 @@ async function loadTradeMemories(userId: string, queryText: string) {
   if (!hasPinecone) {
     return [];
   }
-  const index = getPineconeIndex();
-  if (!index) {
-    return [];
-  }
-  const queryEmbedding = await createEmbedding(queryText);
-  if (!queryEmbedding) {
-    return [];
-  }
-  const namespace = index.namespace(pineconeNamespace);
-  const result = await namespace.query({
-    vector: queryEmbedding,
-    topK: 4,
-    includeMetadata: true,
-    filter: {
+  try {
+    const index = getPineconeIndex();
+    if (!index) {
+      return [];
+    }
+    const queryEmbedding = await createEmbedding(queryText);
+    if (!queryEmbedding) {
+      return [];
+    }
+    const namespace = index.namespace(pineconeNamespace);
+    const result = await namespace.query({
+      vector: queryEmbedding,
+      topK: 4,
+      includeMetadata: true,
+      filter: {
+        userId,
+      },
+    });
+    return result.matches?.map((match) => match.metadata ?? {}) ?? [];
+  } catch (error) {
+    logger.warn('ai.memory.failed', {
       userId,
-    },
-  });
-  return result.matches?.map((match) => match.metadata ?? {}) ?? [];
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
 }
 
 function buildPrompt(params: {

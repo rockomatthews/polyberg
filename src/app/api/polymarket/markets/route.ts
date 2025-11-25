@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     const limit = clampLimit(Number.isNaN(rawLimit) ? 8 : rawLimit);
     const query = normalize(params.get('q'));
 
-        const payload = await clobClient.getMarkets();
+    const payload = await clobClient.getMarkets();
         const marketsResponse = payload.data as ClobMarket[];
         const eligible = marketsResponse.filter((market) => {
           // Polymarket currently reports enable_order_book = false for most markets,

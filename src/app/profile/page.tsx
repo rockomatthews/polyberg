@@ -202,7 +202,13 @@ export default async function ProfilePage() {
         </Card>
 
         <div id="builder-credentials">
-          <CredentialPanel />
+          <CredentialPanel
+            providedByEnv={{
+              builderSigner: hasBuilderSigning,
+              l2Creds: hasL2Auth,
+              relayerSigner: hasOrderSigner,
+            }}
+          />
         </div>
 
         <SafePanel

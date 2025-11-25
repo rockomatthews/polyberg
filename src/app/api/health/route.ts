@@ -33,12 +33,49 @@ async function checkRelayer() {
   if (!hasRelayer || !env.relayerUrl) {
     return { ok: false, message: 'Relayer URL missing' };
   }
-  try {
-    const response = await fetch(`${env.relayerUrl.replace(/\/$/, '')}/health`, {
+  const baseUrl = env.relayerUrl.replace(/\/$/, '');
+  const relayerHost = (() => {
+    try {
+      return new URL(env.relayerUrl).hostname;
+    } catch {
+      return '';
+    }
+  })();
+  const isManagedPolymarketRelayer = /\.polymarket\.com$/i.test(relayerHost);
+
+  const probe = async (path: string) => {
+    const response = await fetch(`${baseUrl}${path}`, {
       method: 'GET',
       cache: 'no-store',
     });
-    return { ok: response.ok, status: response.status };
+    return response;
+  };
+
+  try {
+    const healthResponse = await probe('/health').catch(() => null);
+    if (healthResponse?.ok) {
+      return { ok: true, status: healthResponse.status };
+    }
+    if (healthResponse && healthResponse.status === 404 && isManagedPolymarketRelayer) {
+      return {
+        ok: true,
+        status: healthResponse.status,
+        message: 'Managed Polymarket relayer reachable (health endpoint not exposed)',
+      };
+    }
+
+    const rootResponse = await probe('').catch(() => null);
+    if (rootResponse?.ok) {
+      return { ok: true, status: rootResponse.status };
+    }
+
+    return {
+      ok: false,
+      status: healthResponse?.status ?? rootResponse?.status,
+      message: healthResponse
+        ? `Relayer responded with HTTP ${healthResponse.status}`
+        : 'Relayer health check failed',
+    };
   } catch (error) {
     return {
       ok: false,

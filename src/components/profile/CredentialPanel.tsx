@@ -17,6 +17,12 @@ type CredentialStatus = {
   hasRelayerSigner: boolean;
 };
 
+type ProvidedByEnv = {
+  builderSigner: boolean;
+  l2Creds: boolean;
+  relayerSigner: boolean;
+};
+
 type FormState = {
   builderSignerUrl: string;
   builderSignerToken: string;
@@ -37,16 +43,31 @@ const initialForm: FormState = {
   relayerPrivateKey: '',
 };
 
-export function CredentialPanel() {
+type Capability = 'builderSigner' | 'l2Creds' | 'relayerSigner';
+
+type CredentialPanelProps = {
+  providedByEnv: ProvidedByEnv;
+};
+
+export function CredentialPanel({ providedByEnv }: CredentialPanelProps) {
   const [status, setStatus] = React.useState<CredentialStatus | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [form, setForm] = React.useState<FormState>(initialForm);
-  const steps = React.useMemo(
+  const derivedStatus = React.useMemo(
+    () => ({
+      builderSigner: Boolean(providedByEnv.builderSigner || status?.hasBuilderSigner),
+      l2Creds: Boolean(providedByEnv.l2Creds || status?.hasL2Creds),
+      relayerSigner: Boolean(providedByEnv.relayerSigner || status?.hasRelayerSigner),
+    }),
+    [providedByEnv, status],
+  );
+  const baseSteps = React.useMemo(
     () => [
       {
         id: 'signer',
+        capability: 'builderSigner' as Capability,
         title: 'Connect builder signer',
         description: 'Point to your remote signing server so Polymarket can attribute trades.',
         doc: 'https://docs.polymarket.com/developers/builders/builder-signing-server',
@@ -66,6 +87,7 @@ export function CredentialPanel() {
       },
       {
         id: 'l2',
+        capability: 'l2Creds' as Capability,
         title: 'Paste L2 API credentials',
         description: 'Grab the key / secret / passphrase from polymarket.com → Settings → Builder.',
         doc: 'https://docs.polymarket.com/developers/builders/builder-profile',
@@ -78,6 +100,7 @@ export function CredentialPanel() {
       },
       {
         id: 'relayer',
+        capability: 'relayerSigner' as Capability,
         title: 'Wire relayer signer',
         description: 'Use the Safe-owner private key + Polygon RPC to submit gasless snipes.',
         doc: 'https://docs.polymarket.com/developers/builders/relayer-client',
@@ -97,6 +120,10 @@ export function CredentialPanel() {
       },
     ],
     [status],
+  );
+  const steps = React.useMemo(
+    () => baseSteps.filter((step) => !providedByEnv[step.capability]),
+    [baseSteps, providedByEnv],
   );
   const firstIncomplete = steps.findIndex((step) => !step.complete);
   const [activeStep, setActiveStep] = React.useState(() =>
@@ -192,104 +219,124 @@ export function CredentialPanel() {
             </Stack>
           ) : status ? (
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-              <StatusPill label="Builder signer" ok={status.hasBuilderSigner} />
-              <StatusPill label="L2 API creds" ok={status.hasL2Creds} />
-              <StatusPill label="Relayer signer" ok={status.hasRelayerSigner} />
+              <StatusPill
+                label={
+                  providedByEnv.builderSigner ? 'Builder signer (site-provided)' : 'Builder signer'
+                }
+                ok={derivedStatus.builderSigner}
+              />
+              <StatusPill
+                label={providedByEnv.l2Creds ? 'L2 API creds (site-provided)' : 'L2 API creds'}
+                ok={derivedStatus.l2Creds}
+              />
+              <StatusPill
+                label={
+                  providedByEnv.relayerSigner ? 'Relayer signer (site-provided)' : 'Relayer signer'
+                }
+                ok={derivedStatus.relayerSigner}
+              />
             </Stack>
           ) : null}
-          <Stack spacing={1.5}>
-            {steps.map((step, index) => {
-              const isActive = activeStep === index;
-              const isComplete = step.complete;
-              return (
-                <Card
-                  key={step.id}
-                  variant="outlined"
-                  sx={{ borderColor: isComplete ? 'success.light' : 'rgba(255,255,255,0.08)' }}
-                >
-                  <CardContent>
-                    <Stack spacing={1.5}>
-                      <Stack
-                        direction={{ xs: 'column', sm: 'row' }}
-                        justifyContent="space-between"
-                        alignItems={{ xs: 'flex-start', sm: 'center' }}
-                        spacing={1}
-                      >
-                        <div>
-                          <Typography variant="subtitle1">{step.title}</Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {step.description}{' '}
-                            <Button
-                              size="small"
-                              component={Link}
-                              href={step.doc}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              Docs
-                            </Button>
-                          </Typography>
-                        </div>
-                        <StatusPill label={isComplete ? 'Complete' : 'Pending'} ok={isComplete} />
-                      </Stack>
-                      {isActive ? (
-                        <Stack spacing={1}>
-                          {step.fields.map((field) => (
-                            <TextField
-                              key={field.name}
-                              label={field.label}
-                              variant="outlined"
-                              size="small"
-                              type={field.name.toLowerCase().includes('key') ? 'password' : 'text'}
-                              value={form[field.name]}
-                              onChange={handleChange(field.name)}
-                              placeholder={field.placeholder}
-                              autoComplete="off"
-                            />
-                          ))}
-                          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-                            <Button
-                              variant="contained"
-                              onClick={() => handleSave(step.fields.map((f) => f.name), index + 1)}
-                              disabled={saving}
-                            >
-                              {saving ? 'Saving…' : 'Save & continue'}
-                            </Button>
-                            <Button
-                              variant="text"
-                              onClick={() => {
-                                setForm((prev) => ({
-                                  ...prev,
-                                  ...step.fields.reduce(
-                                    (acc, field) => ({
-                                      ...acc,
-                                      [field.name]: '',
-                                    }),
-                                    {},
-                                  ),
-                                }));
-                              }}
-                              disabled={saving}
-                            >
-                              Clear
-                            </Button>
-                          </Stack>
-                        </Stack>
-                      ) : (
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          onClick={() => setActiveStep(index)}
+          {steps.length === 0 ? (
+            <Alert severity="success" variant="outlined">
+              All credential requirements are covered by the site configuration. No manual secrets
+              are needed to trade from this account.
+            </Alert>
+          ) : (
+            <Stack spacing={1.5}>
+              {steps.map((step, index) => {
+                const isActive = activeStep === index;
+                const isComplete = step.complete;
+                return (
+                  <Card
+                    key={step.id}
+                    variant="outlined"
+                    sx={{ borderColor: isComplete ? 'success.light' : 'rgba(255,255,255,0.08)' }}
+                  >
+                    <CardContent>
+                      <Stack spacing={1.5}>
+                        <Stack
+                          direction={{ xs: 'column', sm: 'row' }}
+                          justifyContent="space-between"
+                          alignItems={{ xs: 'flex-start', sm: 'center' }}
+                          spacing={1}
                         >
-                          {isComplete ? 'Edit' : 'Fill step'}
-                        </Button>
-                      )}
-                    </Stack>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </Stack>
+                          <div>
+                            <Typography variant="subtitle1">{step.title}</Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {step.description}{' '}
+                              <Button
+                                size="small"
+                                component={Link}
+                                href={step.doc}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Docs
+                              </Button>
+                            </Typography>
+                          </div>
+                          <StatusPill label={isComplete ? 'Complete' : 'Pending'} ok={isComplete} />
+                        </Stack>
+                        {isActive ? (
+                          <Stack spacing={1}>
+                            {step.fields.map((field) => (
+                              <TextField
+                                key={field.name}
+                                label={field.label}
+                                variant="outlined"
+                                size="small"
+                                type={field.name.toLowerCase().includes('key') ? 'password' : 'text'}
+                                value={form[field.name]}
+                                onChange={handleChange(field.name)}
+                                placeholder={field.placeholder}
+                                autoComplete="off"
+                              />
+                            ))}
+                            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                              <Button
+                                variant="contained"
+                                onClick={() => handleSave(step.fields.map((f) => f.name), index + 1)}
+                                disabled={saving}
+                              >
+                                {saving ? 'Saving…' : 'Save & continue'}
+                              </Button>
+                              <Button
+                                variant="text"
+                                onClick={() => {
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    ...step.fields.reduce(
+                                      (acc, field) => ({
+                                        ...acc,
+                                        [field.name]: '',
+                                      }),
+                                      {},
+                                    ),
+                                  }));
+                                }}
+                                disabled={saving}
+                              >
+                                Clear
+                              </Button>
+                            </Stack>
+                          </Stack>
+                        ) : (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => setActiveStep(index)}
+                          >
+                            {isComplete ? 'Edit' : 'Fill step'}
+                          </Button>
+                        )}
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </Stack>
+          )}
         </Stack>
       </CardContent>
     </Card>

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+/* eslint-disable @typescript-eslint/no-require-imports */
+
 /**
  * Derive or create Polymarket L2 API credentials (key / secret / passphrase)
  * using a locally supplied Polygon private key.

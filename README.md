@@ -110,6 +110,13 @@ POLYMARKET_L2_API_SECRET=...
 POLYMARKET_L2_API_PASSPHRASE=...
 ```
 
+## Monetization Playbook
+
+- **Builder fee override**: Polymarket lets builders set a taker/maker markup that is skimmed whenever an order matches. Configure your Builder profile with a few bps of spread (e.g., 0.5–2 bps) and every trader routed through Polyberg contributes automatically—no extra UX needed.
+- **Premium relayer tiers**: Keep the global builder credentials warm for free users (watchlist, AI, read-only data) but gate actual order routing or faster polling intervals behind a paid plan. Because the relayer + Safe deployment live server-side, you can flip access with a single feature flag tied to Stripe/UPI.
+- **White‑label seats**: Offer hosted builder stacks (signer + relayer + Pinecone memory) for desks that don’t want to manage infra. Drop-copies of their trades plus Slack/webhook alerts become an add-on revenue stream.
+- **Signal marketplace**: The Strategy Copilot already summarizes watchlists. Persist those prompts and resell curated alerts (e.g., “Fed cuts odds cross 65%”) on a rev-share, or charge for API/websocket access to your cached sentiment.
+
 ## Deployment
 
 Deploy straight to Vercel; the project is App-Directory compatible and uses the built-in MUI Next.js cache provider so zero extra plumbing is required. Remember to mirror your `.env.local` secrets inside the Vercel project settings before promoting to production.

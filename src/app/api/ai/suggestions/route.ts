@@ -145,11 +145,28 @@ export async function POST(request: Request) {
       .max(4),
   });
 
-  const result = await generateObject({
-    model: 'openai/gpt-4o-mini',
-    prompt,
-    schema,
-  });
+  let result;
+  try {
+    result = await generateObject({
+      model: 'openai/gpt-4o-mini',
+      prompt,
+      schema,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Strategy Copilot could not reach the AI gateway.';
+    logger.error('ai.copilot.failed', {
+      error: message,
+    });
+    return NextResponse.json(
+      {
+        text: 'Strategy Copilot is cooling down. Try again in a few seconds.',
+        suggestions: [],
+        meta: { error: message },
+      },
+      { status: 200 },
+    );
+  }
 
   const summary = result.object.summary ?? 'No insight generated.';
   const suggestions = result.object.suggestions ?? [];

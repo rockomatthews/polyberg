@@ -41,6 +41,7 @@ import {
 import { CredentialPanel } from '@/components/profile/CredentialPanel';
 import { OnboardingWizard } from '@/components/profile/OnboardingWizard';
 import { BuilderStatusPanel } from '@/components/profile/BuilderStatusPanel';
+import { SafeSummary } from '@/components/profile/SafeSummary';
 import { logger } from '@/lib/logger';
 
 function formatTimestamp(timestamp?: string) {
@@ -184,6 +185,11 @@ export default async function ProfilePage() {
                 </Link>
               </Stack>
             </Stack>
+            <SafeSummary
+              safeAddress={sessionSafe?.safe_address ?? null}
+              collateralAddress={env.collateralAddress}
+              canDeploy={hasRelayer}
+            />
           </CardContent>
         </Card>
 

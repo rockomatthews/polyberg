@@ -1,4 +1,4 @@
-import { createTheme } from '@mui/material/styles';
+import { alpha, createTheme } from '@mui/material/styles';
 
 declare module '@mui/material/styles' {
   interface Palette {
@@ -53,6 +53,63 @@ export const terminalTheme = createTheme({
           textTransform: 'none',
           borderRadius: 6,
           fontWeight: 600,
+        },
+      },
+    },
+    MuiTextField: {
+      defaultProps: {
+        size: 'small',
+      },
+    },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        root: {
+          borderRadius: 10,
+          backgroundColor: alpha('#ffffff', 0.02),
+          '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+            borderColor: '#4dd0e1',
+          },
+        },
+        input: {
+          padding: '14px 16px',
+          fontSize: '0.92rem',
+          lineHeight: 1.35,
+          '::placeholder': {
+            opacity: 0.7,
+          },
+        },
+      },
+    },
+    MuiFilledInput: {
+      styleOverrides: {
+        root: {
+          borderRadius: 10,
+          backgroundColor: alpha('#ffffff', 0.04),
+          '&:hover': {
+            backgroundColor: alpha('#ffffff', 0.06),
+          },
+          '&.Mui-focused': {
+            backgroundColor: alpha('#ffffff', 0.08),
+          },
+        },
+        input: {
+          padding: '18px 16px 12px',
+          fontSize: '0.92rem',
+          lineHeight: 1.35,
+          '::placeholder': {
+            opacity: 0.7,
+          },
+        },
+      },
+    },
+    MuiInputLabel: {
+      styleOverrides: {
+        root: {
+          fontSize: '0.82rem',
+          transform: 'translate(14px, 12px) scale(1)',
+        },
+        shrink: {
+          transform: 'translate(14px, -8px) scale(0.85)',
         },
       },
     },

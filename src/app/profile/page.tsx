@@ -30,7 +30,6 @@ import {
 } from '@/lib/env';
 import { ensureRelayClient, hasRelayClient } from '@/lib/relayer/relayClient';
 import { SignOutButton } from '@/components/auth/SignOutButton';
-import { SafePanel } from '@/components/profile/SafePanel';
 import {
   listCopilotEntries,
   type CopilotEntry,
@@ -191,6 +190,27 @@ export default async function ProfilePage() {
         <Card variant="outlined">
           <CardContent>
             <Typography variant="h6" gutterBottom>
+              Builder Onboarding Wizard
+            </Typography>
+            <Typography variant="body2" color="text.secondary" paragraph>
+              Track the end-to-end checklist every trader must complete before firing gasless snipes.
+              Steps mark themselves complete as you configure credentials, deploy a Safe, and pass the
+              health check.
+            </Typography>
+            <OnboardingWizard
+              hasBuilderSigner={hasBuilderSigning || credentialStatus.hasBuilderSigner}
+              hasL2Creds={hasL2Auth || credentialStatus.hasL2Creds}
+              hasRelayerSigner={credentialStatus.hasRelayerSigner}
+              hasSafe={Boolean(sessionSafe?.safe_address)}
+              safeStatus={sessionSafe?.status}
+              canDeploySafe={hasRelayer}
+            />
+          </CardContent>
+        </Card>
+
+        <Card variant="outlined">
+          <CardContent>
+            <Typography variant="h6" gutterBottom>
               Builder Connectivity
             </Typography>
             <Typography variant="body2" color="text.secondary" paragraph>
@@ -210,13 +230,6 @@ export default async function ProfilePage() {
             }}
           />
         </div>
-
-        <SafePanel
-          initialUserSafe={sessionSafe}
-          sharedSafeAddress={env.safeAddress ?? null}
-          canDeploy={hasRelayer}
-          collateralAddress={env.collateralAddress}
-        />
 
         <Card variant="outlined">
           <CardContent>
@@ -257,26 +270,6 @@ export default async function ProfilePage() {
           </CardContent>
         </Card>
 
-        <Card variant="outlined">
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Builder Onboarding Wizard
-            </Typography>
-            <Typography variant="body2" color="text.secondary" paragraph>
-              Track the end-to-end checklist every trader must complete before firing gasless snipes.
-              Steps mark themselves complete as you configure credentials, deploy a Safe, and pass the
-              health check.
-            </Typography>
-            <OnboardingWizard
-              hasBuilderSigner={hasBuilderSigning || credentialStatus.hasBuilderSigner}
-              hasL2Creds={hasL2Auth || credentialStatus.hasL2Creds}
-              hasRelayerSigner={credentialStatus.hasRelayerSigner}
-              hasSafe={Boolean(sessionSafe?.safe_address)}
-              safeStatus={sessionSafe?.status}
-              canDeploySafe={hasRelayer}
-            />
-          </CardContent>
-        </Card>
       </Stack>
     </Container>
   );

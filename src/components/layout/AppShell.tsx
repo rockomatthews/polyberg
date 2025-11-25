@@ -44,23 +44,23 @@ export function AppShell() {
           },
           gridTemplateAreas: {
             xs: `
+              "ticket"
               "watch"
               "alerts"
               "ladder"
-              "ticket"
               "activity"
               "side"
             `,
             md: `
+              "ticket ladder"
               "watch ladder"
               "alerts ladder"
-              "ticket activity"
-              "side activity"
+              "activity side"
             `,
             lg: `
+              "ticket ladder side"
               "watch ladder side"
               "alerts ladder side"
-              "ticket ladder side"
               "activity ladder side"
             `,
           },

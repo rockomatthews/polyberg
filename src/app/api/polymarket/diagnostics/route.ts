@@ -43,7 +43,6 @@ async function probeBalance(client: ClobClient): Promise<ProbeResult> {
     return {
       ok: true,
       details: {
-        address: result.address,
         balance: result.balance,
         allowance: result.allowance,
       },

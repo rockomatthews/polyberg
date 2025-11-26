@@ -46,7 +46,7 @@ const STATIC_STRATEGIES: StrategyDefinition[] = [
   },
 ];
 
-export function listStrategies(): StrategyDefinition[] {
+export async function listStrategies(): Promise<StrategyDefinition[]> {
   return STATIC_STRATEGIES.map((strategy) => ({ ...strategy }));
 }
 

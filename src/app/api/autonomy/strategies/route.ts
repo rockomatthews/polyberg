@@ -19,12 +19,12 @@ export async function GET() {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
-  const runs = await fetchRecentStrategyRuns(10);
+  const [strategies, runs] = await Promise.all([listStrategies(), fetchRecentStrategyRuns(10)]);
   const tradingEnabled = process.env.AUTONOMY_TRADING_ENABLED === 'true';
   const cronConfigured = Boolean(process.env.CRON_SECRET);
 
   return NextResponse.json({
-    strategies: listStrategies(),
+    strategies,
     runs,
     tradingEnabled,
     cronConfigured,

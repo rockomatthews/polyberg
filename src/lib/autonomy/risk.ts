@@ -10,7 +10,8 @@ export async function applyRiskControls(
   const intents: ExecutionIntent[] = [];
 
   for (const signal of signals) {
-    const clampedNotional = Math.min(signal.sizeUsd, strategy.maxNotional);
+    const clampedNotional =
+      signal.intent === 'exit' ? signal.sizeUsd : Math.min(signal.sizeUsd, strategy.maxNotional);
     const normalizedPrice = clamp(signal.limitPriceCents / 100, 0.01, 0.99);
     const sizeShares = Number((clampedNotional / normalizedPrice).toFixed(4));
 
@@ -23,13 +24,15 @@ export async function applyRiskControls(
       continue;
     }
 
-    const permitted = await reserveDailyNotional(strategy, clampedNotional, now);
-    if (!permitted) {
-      logger.warn('strategies.risk.dailyCap', {
-        strategyId: strategy.id,
-        marketId: signal.marketId,
-      });
-      continue;
+    if (signal.intent !== 'exit') {
+      const permitted = await reserveDailyNotional(strategy, clampedNotional, now);
+      if (!permitted) {
+        logger.warn('strategies.risk.dailyCap', {
+          strategyId: strategy.id,
+          marketId: signal.marketId,
+        });
+        continue;
+      }
     }
 
     intents.push({

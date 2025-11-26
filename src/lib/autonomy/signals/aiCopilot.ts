@@ -81,6 +81,7 @@ export async function runAiConfidenceStrategy(
     results.push({
       strategyId: strategy.id,
       source: strategy.source,
+      mode: strategy.mode,
       marketId: market.conditionId,
       marketQuestion: market.question,
       market,
@@ -92,6 +93,7 @@ export async function runAiConfidenceStrategy(
       confidence: clamp(opp.confidence, 0.1, 1),
       reason: opp.rationale,
       expiresAt: expiry,
+      intent: 'enter',
       metadata: {
         response: opp,
       },

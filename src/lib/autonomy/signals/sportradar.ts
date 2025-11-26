@@ -112,6 +112,7 @@ export async function runSportradarInjuryStrategy(
     results.push({
       strategyId: strategy.id,
       source: strategy.source,
+      mode: strategy.mode,
       marketId: market.conditionId,
       marketQuestion: market.question,
       market,
@@ -123,6 +124,7 @@ export async function runSportradarInjuryStrategy(
       confidence: event.status.toLowerCase() === 'out' ? 0.8 : 0.65,
       reason,
       expiresAt: expiry,
+      intent: 'enter',
       metadata: {
         player: event.player,
         status: event.status,

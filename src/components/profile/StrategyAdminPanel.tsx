@@ -205,8 +205,8 @@ function StrategyRow({
         <Box>
           <Typography variant="subtitle1">{strategy.name}</Typography>
           <Typography variant="body2" color="text.secondary">
-            {strategy.source.toUpperCase()} · {strategy.schedule} UTC · Max ${strategy.maxNotional}{' '}
-            · Daily cap ${strategy.dailyCap}
+            {formatStrategyDescriptor(strategy)} · {strategy.schedule} UTC · Max $
+            {strategy.maxNotional} · Daily cap ${strategy.dailyCap}
           </Typography>
         </Box>
         <Chip
@@ -240,6 +240,11 @@ function chipColor(status: StrategyRunResult['status'] | undefined): ChipProps['
   if (status === 'error') return 'error';
   if (status === 'skipped') return 'warning';
   return 'default';
+}
+
+function formatStrategyDescriptor(strategy: StrategyDefinition) {
+  const mode = strategy.mode === 'exit' ? 'Exit' : 'Entry';
+  return `${mode.toUpperCase()} · ${strategy.source.replace(/-/g, ' ').toUpperCase()}`;
 }
 
 function formatRunSummary(run: StrategyRunSummary) {

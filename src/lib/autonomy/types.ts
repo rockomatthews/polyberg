@@ -1,6 +1,12 @@
 import type { Market } from '@/lib/api/types';
 
-export type StrategySource = 'ai' | 'sportradar';
+export type StrategySource =
+  | 'ai-entry'
+  | 'ai-exit'
+  | 'sportradar-entry'
+  | 'maker-exit';
+
+export type StrategyMode = 'entry' | 'exit';
 
 export type StrategyDefinition = {
   id: string;
@@ -8,6 +14,7 @@ export type StrategyDefinition = {
   enabled: boolean;
   schedule: string;
   source: StrategySource;
+  mode: StrategyMode;
   maxNotional: number;
   dailyCap: number;
   params: Record<string, unknown>;
@@ -16,6 +23,7 @@ export type StrategyDefinition = {
 export type StrategySignal = {
   strategyId: string;
   source: StrategySource;
+  mode: StrategyMode;
   marketId: string;
   marketQuestion: string;
   market?: Market;
@@ -28,6 +36,7 @@ export type StrategySignal = {
   reason: string;
   expiresAt: string;
   metadata?: Record<string, unknown>;
+  intent: 'enter' | 'exit';
 };
 
 export type ExecutionIntent = StrategySignal & {

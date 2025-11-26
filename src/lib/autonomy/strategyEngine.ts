@@ -13,6 +13,8 @@ import { applyRiskControls } from '@/lib/autonomy/risk';
 import { executeIntents } from '@/lib/autonomy/orderExecutor';
 import { runAiConfidenceStrategy } from '@/lib/autonomy/signals/aiCopilot';
 import { runSportradarInjuryStrategy } from '@/lib/autonomy/signals/sportradar';
+import { runAiExitStrategy } from '@/lib/autonomy/exits/aiExit';
+import { runMakerReversionStrategy } from '@/lib/autonomy/exits/makerReversion';
 
 const STATIC_STRATEGIES: StrategyDefinition[] = [
   {
@@ -20,7 +22,8 @@ const STATIC_STRATEGIES: StrategyDefinition[] = [
     name: 'AI Confidence Sniper',
     enabled: true,
     schedule: '*/1 * * * *',
-    source: 'ai',
+    source: 'ai-entry',
+    mode: 'entry',
     maxNotional: 50,
     dailyCap: 200,
     params: {
@@ -34,7 +37,8 @@ const STATIC_STRATEGIES: StrategyDefinition[] = [
     name: 'Sportradar Injury Pulse',
     enabled: true,
     schedule: '*/1 * * * *',
-    source: 'sportradar',
+    source: 'sportradar-entry',
+    mode: 'entry',
     maxNotional: 40,
     dailyCap: 200,
     params: {
@@ -42,6 +46,31 @@ const STATIC_STRATEGIES: StrategyDefinition[] = [
       injuryStatuses: ['Out', 'Doubtful'],
       maxSpread: 4,
       cooldownMinutes: 10,
+    },
+  },
+  {
+    id: 'ai-exit-v1',
+    name: 'AI Unwind Sentinel',
+    enabled: true,
+    schedule: '*/1 * * * *',
+    source: 'ai-exit',
+    mode: 'exit',
+    maxNotional: 50,
+    dailyCap: 400,
+    params: {},
+  },
+  {
+    id: 'maker-revert-v1',
+    name: 'Maker Spread Reversion',
+    enabled: true,
+    schedule: '*/1 * * * *',
+    source: 'maker-exit',
+    mode: 'exit',
+    maxNotional: 40,
+    dailyCap: 400,
+    params: {
+      spreadThreshold: 1.5,
+      maxHoldMinutes: 20,
     },
   },
 ];
@@ -118,8 +147,10 @@ function shouldRun(schedule: string, now: Date) {
 }
 
 const handlers: Record<StrategyDefinition['source'], StrategyHandler> = {
-  ai: runAiConfidenceStrategy,
-  sportradar: runSportradarInjuryStrategy,
+  'ai-entry': runAiConfidenceStrategy,
+  'sportradar-entry': runSportradarInjuryStrategy,
+  'ai-exit': runAiExitStrategy,
+  'maker-exit': runMakerReversionStrategy,
 };
 
 async function executeStrategy(

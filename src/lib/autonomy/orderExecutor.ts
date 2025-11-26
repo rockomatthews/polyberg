@@ -3,6 +3,7 @@ import { OrderType, Side, type UserOrder } from '@polymarket/clob-client/dist/ty
 import { clobClient } from '@/lib/polymarket/clobClient';
 import { logger } from '@/lib/logger';
 import type { ExecutionIntent } from '@/lib/autonomy/types';
+import { clearManagedPosition, recordEntryIntent } from '@/lib/autonomy/managedPositions';
 
 const tradingEnabled = process.env.AUTONOMY_TRADING_ENABLED === 'true';
 
@@ -28,11 +29,6 @@ export async function executeIntents(intents: ExecutionIntent[]): Promise<OrderE
         sizeShares: intent.sizeShares,
       }),
     );
-    return intents.map((intent) => ({
-      intent,
-      status: 'skipped',
-      reason: 'autonomy trading disabled',
-    }));
   }
 
   const results: OrderExecutionResult[] = [];
@@ -48,6 +44,15 @@ export async function executeIntents(intents: ExecutionIntent[]): Promise<OrderE
   }
 
   for (const intent of intents) {
+    if (!tradingEnabled) {
+      results.push({
+        intent,
+        status: 'skipped',
+        reason: 'autonomy trading disabled',
+      });
+      continue;
+    }
+
     try {
       const order: UserOrder = {
         tokenID: intent.tokenId,
@@ -64,6 +69,12 @@ export async function executeIntents(intents: ExecutionIntent[]): Promise<OrderE
         orderId: orderId ?? 'pending',
         marketId: intent.marketId,
       });
+
+      if (intent.intent === 'enter') {
+        await recordEntryIntent(intent);
+      } else {
+        await clearManagedPosition(intent.tokenId);
+      }
 
       results.push({
         intent,

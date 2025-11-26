@@ -1,6 +1,6 @@
 'use server';
 
-import cronParser from 'cron-parser';
+import { CronExpressionParser } from 'cron-parser';
 
 import { logger } from '@/lib/logger';
 
@@ -117,12 +117,11 @@ export async function runScheduledStrategies(now = new Date()): Promise<{
 
 function shouldRun(schedule: string, now: Date) {
   try {
-    const iterator = cronParser.parseExpression(schedule, {
+    const expression = CronExpressionParser.parse(schedule, {
       currentDate: now,
-      iterator: true,
       tz: 'UTC',
     });
-    const previous = iterator.prev().value.toDate();
+    const previous = expression.prev().toDate();
     const delta = Math.abs(now.getTime() - previous.getTime());
     // treat anything within a 60s window as due (because cron fires once per minute)
     return delta < 60_000;

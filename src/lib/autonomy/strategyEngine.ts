@@ -1,6 +1,6 @@
 'use server';
 
-import { parseExpression } from 'cron-parser';
+import cronParser from 'cron-parser';
 
 import { logger } from '@/lib/logger';
 
@@ -117,7 +117,7 @@ export async function runScheduledStrategies(now = new Date()): Promise<{
 
 function shouldRun(schedule: string, now: Date) {
   try {
-    const iterator = parseExpression(schedule, {
+    const iterator = cronParser.parseExpression(schedule, {
       currentDate: now,
       iterator: true,
       tz: 'UTC',

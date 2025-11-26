@@ -49,18 +49,38 @@ function matchesQuery(query: string, market: ClobMarket) {
 export async function GET(request: NextRequest) {
   try {
     const params = request.nextUrl.searchParams;
-    const rawLimit = Number(params.get('limit') ?? '8');
+    const rawLimit = Number(params.get('limit') ?? '12');
     const limit = clampLimit(Number.isNaN(rawLimit) ? 8 : rawLimit);
     const query = normalize(params.get('q'));
 
     const payload = await clobClient.getMarkets();
-        const marketsResponse = payload.data as ClobMarket[];
-        const eligible = marketsResponse.filter((market) => {
-          // Polymarket currently reports enable_order_book = false for most markets,
-          // so we only require that the market is active and exposes at least one token.
-          return market.active && (market.tokens?.length ?? 0) > 0;
-        });
-    const filtered = eligible.filter((market) => matchesQuery(query, market));
+    const marketsResponse = payload.data as ClobMarket[];
+    const eligible = marketsResponse.filter((market) => {
+      // Polymarket currently reports enable_order_book = false for most markets,
+      // so we only require that the market is active and exposes at least one token.
+      return market.active && (market.tokens?.length ?? 0) > 0;
+    });
+
+    const now = Date.now();
+    const upcoming = eligible.filter((market) => {
+      if (!market.end_date_iso) {
+        return true;
+      }
+      const ts = Date.parse(market.end_date_iso);
+      if (Number.isNaN(ts)) {
+        return true;
+      }
+      // Keep markets that have not yet expired (with a small grace window).
+      return ts >= now - 60 * 60 * 1000;
+    });
+
+    const prioritized = (upcoming.length ? upcoming : eligible).sort((a, b) => {
+      const aTs = a.end_date_iso ? Date.parse(a.end_date_iso) : Number.POSITIVE_INFINITY;
+      const bTs = b.end_date_iso ? Date.parse(b.end_date_iso) : Number.POSITIVE_INFINITY;
+      return aTs - bTs;
+    });
+
+    const filtered = prioritized.filter((market) => matchesQuery(query, market));
     const selected = filtered.slice(0, limit);
 
     const markets: Market[] = [];

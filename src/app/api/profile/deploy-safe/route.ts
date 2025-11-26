@@ -7,6 +7,24 @@ import { upsertUserSafe } from '@/lib/services/userService';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 
+type RelayerError = {
+  response?: {
+    status?: number;
+    data?: unknown;
+  };
+};
+
+function extractRelayerMeta(error: unknown) {
+  if (error && typeof error === 'object' && 'response' in error) {
+    const response = (error as RelayerError).response;
+    return {
+      relayerStatus: response?.status ?? null,
+      relayerResponse: response?.data ?? null,
+    };
+  }
+  return null;
+}
+
 export async function POST() {
   if (!hasRelayClient) {
     return NextResponse.json(
@@ -23,20 +41,33 @@ export async function POST() {
   try {
     const client = ensureRelayClient('deploy user Safe');
     const response = await client.deploy();
-    const result = await response.wait();
-    const safeAddress = result?.proxyAddress ?? result?.proxyAddress?.toString();
+    const relayerTransaction = await response.wait();
+    if (!relayerTransaction) {
+      const transactions = await response.getTransaction().catch(() => null);
+      logger.error('safe.deploy.failed', {
+        error: 'Relayer transaction failed',
+        transactionId: response.transactionID,
+        relayerState: response.state,
+        relayerResponse: transactions,
+      });
+      throw new Error(
+        `Relayer did not confirm Safe deployment (transaction ${response.transactionID}).`,
+      );
+    }
+
+    const safeAddress = relayerTransaction.proxyAddress;
     if (!safeAddress) {
       throw new Error('Relayer did not return a Safe address');
     }
     const taskId =
-      typeof result === 'object' && result && 'taskId' in result
-        ? ((result as { taskId?: string }).taskId ?? null)
+      typeof relayerTransaction === 'object' && 'transactionID' in relayerTransaction
+        ? relayerTransaction.transactionID
         : null;
 
     await upsertUserSafe(session.user.id, {
       safeAddress,
-      deploymentTxHash: result?.transactionHash ?? null,
-      status: 'deployed',
+      deploymentTxHash: relayerTransaction.transactionHash ?? null,
+      status: relayerTransaction.state ?? 'deployed',
       ownershipType: 'per-user',
       metadata: {
         taskId,
@@ -45,15 +76,18 @@ export async function POST() {
     });
     return NextResponse.json({
       safeAddress,
-      transactionHash: result?.transactionHash ?? null,
-      status: 'deployed',
+      transactionHash: relayerTransaction.transactionHash ?? null,
+      status: relayerTransaction.state ?? 'deployed',
+      relayerTransactionId: response.transactionID,
     });
   } catch (error) {
-    logger.error('safe.deploy.failed', {
-      error: error instanceof Error ? error.message : String(error),
-    });
     const message = error instanceof Error ? error.message : 'Failed to deploy Safe';
-    return NextResponse.json({ error: message }, { status: 500 });
+    const relayerMeta = extractRelayerMeta(error);
+    logger.error('safe.deploy.failed', {
+      error: message,
+      relayerMeta,
+    });
+    return NextResponse.json({ error: message, meta: relayerMeta }, { status: 500 });
   }
 }
 

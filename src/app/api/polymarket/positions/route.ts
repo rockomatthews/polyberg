@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ClobClient } from '@polymarket/clob-client';
+import type { BuilderTrade, Trade } from '@polymarket/clob-client/dist/types';
 import { getServerSession } from 'next-auth/next';
 
 import { authOptions } from '@/lib/auth';
@@ -12,6 +13,8 @@ type PositionPayload = {
   pnl: number;
   delta: 'Long' | 'Short';
 };
+
+type AnyTrade = BuilderTrade | Trade;
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -41,7 +44,7 @@ export async function GET() {
     const aggregation = new Map<string, PositionPayload>();
 
     trades.forEach((trade) => {
-      const key = trade.market ?? trade.assetId;
+      const key = resolveTradeKey(trade);
       if (!key) {
         return;
       }
@@ -100,7 +103,7 @@ function isBuilderAuthError(error: unknown) {
   return false;
 }
 
-async function getTradesWithFallback(client: ClobClient) {
+async function getTradesWithFallback(client: ClobClient): Promise<AnyTrade[]> {
   try {
     const { trades } = await client.getBuilderTrades(undefined, undefined);
     return trades;
@@ -114,5 +117,15 @@ async function getTradesWithFallback(client: ClobClient) {
     }
     throw error;
   }
+}
+
+function resolveTradeKey(trade: AnyTrade) {
+  if ('market' in trade && trade.market) {
+    return trade.market;
+  }
+  if ('assetId' in trade && trade.assetId) {
+    return trade.assetId;
+  }
+  return undefined;
 }
 

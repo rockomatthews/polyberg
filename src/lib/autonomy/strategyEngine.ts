@@ -3,34 +3,22 @@
 import { CronExpressionParser } from 'cron-parser';
 
 import { logger } from '@/lib/logger';
-
-/**
- * Core strategy definition. These are intentionally light-weight until we persist them in Postgres.
- */
-export type StrategyDefinition = {
-  id: string;
-  name: string;
-  enabled: boolean;
-  schedule: string; // cron expression
-  source: 'ai' | 'sportradar';
-  maxNotional: number;
-  dailyCap: number;
-  params: Record<string, unknown>;
-};
-
-export type StrategyRunResult = {
-  strategyId: string;
-  status: 'skipped' | 'queued' | 'error';
-  reason?: string;
-  tradesEnqueued?: number;
-  durationMs: number;
-};
+import type {
+  StrategyDefinition,
+  StrategyHandler,
+  StrategyRunResult,
+  StrategyRunSummary,
+} from '@/lib/autonomy/types';
+import { applyRiskControls } from '@/lib/autonomy/risk';
+import { executeIntents } from '@/lib/autonomy/orderExecutor';
+import { runAiConfidenceStrategy } from '@/lib/autonomy/signals/aiCopilot';
+import { runSportradarInjuryStrategy } from '@/lib/autonomy/signals/sportradar';
 
 const STATIC_STRATEGIES: StrategyDefinition[] = [
   {
     id: 'ai-confidence-v1',
     name: 'AI Confidence Sniper',
-    enabled: false,
+    enabled: true,
     schedule: '*/1 * * * *',
     source: 'ai',
     maxNotional: 50,
@@ -44,7 +32,7 @@ const STATIC_STRATEGIES: StrategyDefinition[] = [
   {
     id: 'sportradar-injury-v1',
     name: 'Sportradar Injury Pulse',
-    enabled: false,
+    enabled: true,
     schedule: '*/1 * * * *',
     source: 'sportradar',
     maxNotional: 40,
@@ -58,13 +46,14 @@ const STATIC_STRATEGIES: StrategyDefinition[] = [
   },
 ];
 
+export function listStrategies(): StrategyDefinition[] {
+  return STATIC_STRATEGIES.map((strategy) => ({ ...strategy }));
+}
+
 /**
  * Entry point for the cron route. Evaluates every registered strategy and runs those that are due.
  */
-export async function runScheduledStrategies(now = new Date()): Promise<{
-  runAt: string;
-  results: StrategyRunResult[];
-}> {
+export async function runScheduledStrategies(now = new Date()): Promise<StrategyRunSummary> {
   const results: StrategyRunResult[] = [];
   for (const strategy of STATIC_STRATEGIES) {
     const start = performance.now();
@@ -87,14 +76,8 @@ export async function runScheduledStrategies(now = new Date()): Promise<{
       continue;
     }
     try {
-      const trades = await executeStrategy(strategy);
-      results.push({
-        strategyId: strategy.id,
-        status: trades > 0 ? 'queued' : 'skipped',
-        tradesEnqueued: trades,
-        reason: trades > 0 ? undefined : 'no qualifying signals',
-        durationMs: performance.now() - start,
-      });
+      const summary = await executeStrategy(strategy, now);
+      results.push(summary);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error('strategies.run.failed', {
@@ -134,14 +117,59 @@ function shouldRun(schedule: string, now: Date) {
   }
 }
 
-async function executeStrategy(strategy: StrategyDefinition): Promise<number> {
-  // Placeholder until we wire real AI + Sportradar ingestion.
-  logger.info('strategies.run.start', {
+const handlers: Record<StrategyDefinition['source'], StrategyHandler> = {
+  ai: runAiConfidenceStrategy,
+  sportradar: runSportradarInjuryStrategy,
+};
+
+async function executeStrategy(
+  strategy: StrategyDefinition,
+  now: Date,
+): Promise<StrategyRunResult> {
+  const start = performance.now();
+  const handler = handlers[strategy.source];
+  if (!handler) {
+    return {
+      strategyId: strategy.id,
+      status: 'error',
+      reason: `no handler for source ${strategy.source}`,
+      durationMs: performance.now() - start,
+    };
+  }
+
+  const signals = await handler(strategy, now);
+  if (!signals.length) {
+    return {
+      strategyId: strategy.id,
+      status: 'skipped',
+      reason: 'no qualifying signals',
+      durationMs: performance.now() - start,
+      signals: 0,
+    };
+  }
+
+  const intents = await applyRiskControls(strategy, signals, now);
+  if (!intents.length) {
+    return {
+      strategyId: strategy.id,
+      status: 'skipped',
+      reason: 'risk filters rejected signals',
+      durationMs: performance.now() - start,
+      signals: signals.length,
+    };
+  }
+
+  const executions = await executeIntents(intents);
+  const submitted = executions.filter((result) => result.status === 'submitted').length;
+
+  return {
     strategyId: strategy.id,
-    source: strategy.source,
-  });
-  // TODO: integrate AI + Sportradar signal evaluation and trade execution.
-  return 0;
+    status: submitted > 0 ? 'queued' : 'skipped',
+    tradesEnqueued: submitted,
+    signals: signals.length,
+    reason: submitted > 0 ? undefined : executions[0]?.reason ?? 'orders skipped',
+    durationMs: performance.now() - start,
+  };
 }
 
 

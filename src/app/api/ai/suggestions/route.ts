@@ -9,11 +9,7 @@ import { getPineconeIndex, pineconeNamespace } from '@/lib/pinecone';
 import { createEmbedding } from '@/lib/ai/embeddings';
 import { hasPinecone } from '@/lib/env';
 import { logger } from '@/lib/logger';
-
-const aiKey = process.env.AI_SDK_API_KEY ?? process.env.VERCEL_AI_API_KEY ?? '';
-if (!process.env.AI_SDK_API_KEY && aiKey) {
-  process.env.AI_SDK_API_KEY = aiKey;
-}
+import { aiApiKey } from '@/lib/ai/config';
 
 type MarketContext = {
   question: string;
@@ -114,7 +110,7 @@ function buildPrompt(params: {
 }
 
 export async function POST(request: Request) {
-  if (!aiKey) {
+  if (!aiApiKey) {
     logger.error('ai.missingApiKey');
     return NextResponse.json(
       {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { runScheduledStrategies } from '@/lib/autonomy/strategyEngine';
+import { recordStrategyRun } from '@/lib/autonomy/runLog';
 
 function authorize(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -20,6 +21,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(auth.body, { status: auth.status });
   }
   const summary = await runScheduledStrategies();
+  await recordStrategyRun(summary);
   return NextResponse.json(summary);
 }
 

@@ -11,6 +11,8 @@ const envSchema = z.object({
   POLYMARKET_BUILDER_API_KEY: z.string().optional(),
   POLYMARKET_BUILDER_API_SECRET: z.string().optional(),
   POLYMARKET_BUILDER_API_PASSPHRASE: z.string().optional(),
+  POLYMARKET_BUILDER_SECRET: z.string().optional(),
+  POLYMARKET_BUILDER_PASSPHRASE: z.string().optional(),
   POLYMARKET_RELAYER_URL: z.string().url().optional(),
   POLYMARKET_RELAYER_CHAIN_ID: z.coerce.number().optional(),
   POLYMARKET_SAFE_ADDRESS: z.string().optional(),
@@ -34,6 +36,11 @@ if (!parsed.success) {
 
 const data = parsed.data;
 
+const builderApiSecret =
+  data.POLYMARKET_BUILDER_API_SECRET ?? data.POLYMARKET_BUILDER_SECRET;
+const builderApiPassphrase =
+  data.POLYMARKET_BUILDER_API_PASSPHRASE ?? data.POLYMARKET_BUILDER_PASSPHRASE;
+
 export const env = {
   polymarketApiHost: data.POLYMARKET_API_HOST,
   polymarketChainId: data.POLYMARKET_CHAIN_ID,
@@ -46,13 +53,11 @@ export const env = {
         }
       : undefined,
   builderLocalCreds:
-    data.POLYMARKET_BUILDER_API_KEY &&
-    data.POLYMARKET_BUILDER_API_SECRET &&
-    data.POLYMARKET_BUILDER_API_PASSPHRASE
+    data.POLYMARKET_BUILDER_API_KEY && builderApiSecret && builderApiPassphrase
       ? {
           key: data.POLYMARKET_BUILDER_API_KEY,
-          secret: data.POLYMARKET_BUILDER_API_SECRET,
-          passphrase: data.POLYMARKET_BUILDER_API_PASSPHRASE,
+          secret: builderApiSecret,
+          passphrase: builderApiPassphrase,
         }
       : undefined,
   builderSigner: data.POLYMARKET_BUILDER_SIGNER_URL

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ClobClient } from '@polymarket/clob-client';
 import { getServerSession } from 'next-auth/next';
 
 import { authOptions } from '@/lib/auth';
@@ -36,7 +37,7 @@ export async function GET() {
   }
 
   try {
-    const { trades } = await ensured.client.getBuilderTrades(undefined, undefined);
+    const trades = await getTradesWithFallback(ensured.client);
     const aggregation = new Map<string, PositionPayload>();
 
     trades.forEach((trade) => {
@@ -85,6 +86,33 @@ export async function GET() {
       },
       { status: 200 },
     );
+  }
+}
+
+function isBuilderAuthError(error: unknown) {
+  if (error instanceof Error) {
+    return /builder key auth failed/i.test(error.message);
+  }
+  if (typeof error === 'object' && error && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    return typeof message === 'string' && /builder key auth failed/i.test(message);
+  }
+  return false;
+}
+
+async function getTradesWithFallback(client: ClobClient) {
+  try {
+    const { trades } = await client.getBuilderTrades(undefined, undefined);
+    return trades;
+  } catch (error) {
+    if (isBuilderAuthError(error)) {
+      logger.warn('positions.builderTrades.authFailed', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      const trades = await client.getTrades(undefined, true);
+      return trades;
+    }
+    throw error;
   }
 }
 

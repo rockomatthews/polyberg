@@ -50,7 +50,7 @@ export async function GET() {
       }
 
       const direction = trade.side === 'BUY' ? 1 : -1;
-      const notionals = Number(trade.sizeUsdc ?? trade.size ?? 0);
+      const notionals = Number(resolveTradeNotional(trade));
       const existing = aggregation.get(key) ?? {
         market: key,
         exposure: 0,
@@ -127,5 +127,15 @@ function resolveTradeKey(trade: AnyTrade) {
     return trade.assetId;
   }
   return undefined;
+}
+
+function resolveTradeNotional(trade: AnyTrade) {
+  if ('sizeUsdc' in trade && trade.sizeUsdc != null) {
+    return trade.sizeUsdc;
+  }
+  if ('size' in trade && trade.size != null) {
+    return trade.size;
+  }
+  return 0;
 }
 

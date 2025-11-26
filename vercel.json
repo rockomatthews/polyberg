@@ -1,0 +1,10 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/strategies",
+      "schedule": "*/1 * * * *"
+    }
+  ]
+}
+
+

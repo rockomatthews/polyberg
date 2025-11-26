@@ -59,7 +59,7 @@ export async function GET() {
       };
 
       existing.exposure += direction * notionals;
-      existing.pnl -= direction * Number(trade.feeUsdc ?? 0);
+      existing.pnl -= direction * Number(resolveTradeFee(trade));
       existing.delta = existing.exposure >= 0 ? 'Long' : 'Short';
 
       aggregation.set(key, existing);
@@ -135,6 +135,19 @@ function resolveTradeNotional(trade: AnyTrade) {
   }
   if ('size' in trade && trade.size != null) {
     return trade.size;
+  }
+  return 0;
+}
+
+function resolveTradeFee(trade: AnyTrade) {
+  if ('feeUsdc' in trade && trade.feeUsdc != null) {
+    return trade.feeUsdc;
+  }
+  if ('feeUsd' in trade && trade.feeUsd != null) {
+    return trade.feeUsd;
+  }
+  if ('fee' in trade && trade.fee != null) {
+    return trade.fee;
   }
   return 0;
 }

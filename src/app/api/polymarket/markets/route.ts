@@ -8,9 +8,11 @@ export async function GET(request: NextRequest) {
     const params = request.nextUrl.searchParams;
     const limit = params.get('limit');
     const query = params.get('q') ?? undefined;
+    const mode = query ? 'search' : 'featured';
     const markets = await loadMarketSnapshots({
       limit: limit ? Number(limit) : undefined,
       query,
+      mode,
     });
     return NextResponse.json({ markets });
   } catch (error) {

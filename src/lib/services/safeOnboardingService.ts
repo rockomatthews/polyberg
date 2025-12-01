@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { hasDatabase } from '@/lib/db';
 
 const CACHE_TTL_SECONDS = 30;
+const fallbackSafes = new Map<string, UserSafeRecord>();
 
 export type SafeStatusState = 'disabled' | 'missing' | 'pending' | 'ready' | 'error';
 
@@ -45,7 +46,7 @@ export async function getSafeStatus(userId: string): Promise<SafeStatusPayload> 
     return cached;
   }
 
-  const record = await getUserSafe(userId);
+  const record = await readSafeRecord(userId);
   const status = record ? mapRecordToStatus(record) : buildMissingStatus();
 
   await writeCache(userId, status);
@@ -56,11 +57,8 @@ export async function requestSafeDeployment(userId: string): Promise<SafeStatusP
   if (!hasRelayer || !hasRelayClient) {
     throw new Error('Relayer is not configured; cannot deploy Safe.');
   }
-  if (!hasDatabase) {
-    throw new Error('Database is required to track Safe deployments.');
-  }
 
-  const existing = await getUserSafe(userId);
+  const existing = await readSafeRecord(userId);
   if (existing?.safe_address) {
     const status = mapRecordToStatus(existing);
     await writeCache(userId, status);
@@ -80,7 +78,7 @@ export async function requestSafeDeployment(userId: string): Promise<SafeStatusP
     throw new Error('Relayer did not return a Safe address');
   }
 
-  await upsertUserSafe(userId, {
+  const updated = await storeSafeRecord(userId, {
     safeAddress: relayerTx.proxyAddress,
     deploymentTxHash: relayerTx.transactionHash ?? null,
     status: relayerTx.state ?? 'deployed',
@@ -90,8 +88,6 @@ export async function requestSafeDeployment(userId: string): Promise<SafeStatusP
       relayerUrl: env.relayerUrl ?? null,
     },
   });
-
-  const updated = await getUserSafe(userId);
   const status = updated ? mapRecordToStatus(updated) : buildMissingStatus();
   await writeCache(userId, status);
   logger.info('safe.request.complete', { userId, safe: status.safeAddress });
@@ -174,6 +170,39 @@ async function writeCache(userId: string, status: SafeStatusPayload) {
       error: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+async function readSafeRecord(userId: string) {
+  if (hasDatabase) {
+    return getUserSafe(userId);
+  }
+  return fallbackSafes.get(userId) ?? null;
+}
+
+async function storeSafeRecord(
+  userId: string,
+  input: Parameters<typeof upsertUserSafe>[1],
+): Promise<UserSafeRecord | null> {
+  if (hasDatabase) {
+    await upsertUserSafe(userId, input);
+    return getUserSafe(userId);
+  }
+  if (!input.safeAddress) {
+    return null;
+  }
+  const record: UserSafeRecord = {
+    user_id: userId,
+    safe_address: input.safeAddress,
+    deployment_tx_hash: input.deploymentTxHash ?? null,
+    status: input.status ?? 'deployed',
+    ownership_type: input.ownershipType ?? 'per-user',
+    notes: input.notes ?? null,
+    metadata: input.metadata ?? null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  fallbackSafes.set(userId, record);
+  return record;
 }
 
 

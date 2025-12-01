@@ -128,8 +128,7 @@ export function SafeSummary({ collateralAddress }: SafeSummaryProps) {
           <Chip label="Deploying" color="info" size="small" variant="outlined" />
         </Stack>
         <Typography variant="body2" color="text.secondary">
-          Safe deployment in progress ({safeStatus.statusLabel}). The relayer handles gas and should
-          finish within ~30 seconds.
+          Safe deployment in progress. The relayer handles gas and should finish within ~30 seconds.
         </Typography>
       </Stack>
     );

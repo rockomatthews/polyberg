@@ -34,7 +34,7 @@ export async function fetchMarkets(): Promise<Market[]> {
     console.warn('[cache] read markets failed', error);
   }
   try {
-    const data = await apiGet<{ markets: Market[] }>('/api/polymarket/markets');
+    const data = await apiGet<{ markets: Market[] }>('/api/polymarket/markets?limit=24');
     if (data.markets?.length) {
       setCached('markets:latest', data.markets, 5).catch((err) =>
         console.warn('[cache] set markets failed', err),

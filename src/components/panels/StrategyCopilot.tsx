@@ -68,7 +68,11 @@ export function StrategyCopilot() {
         (market) => market.tag && suggestion.market.toLowerCase().includes(market.tag.toLowerCase()),
       );
     if (match?.primaryTokenId) {
-      setSelection({ marketId: match.conditionId, tokenId: match.primaryTokenId });
+      setSelection({
+        marketId: match.conditionId,
+        tokenId: match.primaryTokenId,
+        question: match.question,
+      });
     }
   };
 

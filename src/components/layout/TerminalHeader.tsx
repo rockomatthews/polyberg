@@ -53,7 +53,11 @@ function MarketSearchInput({ fullWidth }: MarketSearchInputProps) {
 
   const handleSelect = (market: Market) => {
     if (!market.primaryTokenId) return;
-    setSelection({ marketId: market.conditionId, tokenId: market.primaryTokenId });
+    setSelection({
+      marketId: market.conditionId,
+      tokenId: market.primaryTokenId,
+      question: market.question,
+    });
     setValue('');
     setFocused(false);
   };
@@ -77,7 +81,11 @@ function MarketSearchInput({ fullWidth }: MarketSearchInputProps) {
     ) {
       return;
     }
-    setSelection({ marketId: first.conditionId, tokenId: first.primaryTokenId });
+    setSelection({
+      marketId: first.conditionId,
+      tokenId: first.primaryTokenId,
+      question: first.question,
+    });
     autoSelectedRef.current = { query: debounced, marketId: first.conditionId };
   }, [debounced, results, setSelection]);
 

@@ -45,50 +45,38 @@ export type MarketSnapshotOptions = {
   limit?: number;
   query?: string;
   now?: number;
+  mode?: 'featured' | 'search';
 };
 
 export async function loadMarketSnapshots(
   options: MarketSnapshotOptions = {},
 ): Promise<Market[]> {
-  const limit = clampLimit(Number.isFinite(options.limit) ? Number(options.limit) : 12);
+  const limit = clampLimit(Number.isFinite(options.limit) ? Number(options.limit) : 24);
   const query = normalize(options.query);
   const now = options.now ?? Date.now();
+  const mode = options.mode ?? 'featured';
 
-  const samplingMarkets = await fetchSamplingMarkets();
-  const fallbackMarkets =
-    samplingMarkets.length === 0 ? ((await clobClient.getMarkets()).data as ClobMarket[]) : [];
-  const sourceMarkets = samplingMarkets.length ? samplingMarkets : fallbackMarkets;
+  const sourceMarkets = await fetchEligibleMarkets(now);
 
-  const eligible = sourceMarkets.filter((market) => {
-    if (!market.active) return false;
-    if (market.archived) return false;
-    if (market.closed) return false;
-    if (market.accepting_orders === false) return false;
-    return (market.tokens?.length ?? 0) > 0;
-  });
+  if (mode === 'search') {
+    const filtered = sourceMarkets
+      .filter((market) => matchesQuery(query, market))
+      .sort((a, b) => {
+        const aScore = resolvePriorityScore(a, now);
+        const bScore = resolvePriorityScore(b, now);
+        return bScore - aScore;
+      })
+      .slice(0, limit);
+    return hydrateMarkets(filtered);
+  }
 
-  const filtered = eligible.filter((market) => {
-    const endTs = resolveEndTimestamp(market.end_date_iso ?? market.endDate);
-    if (endTs && endTs < now - 6 * 60 * 60 * 1000) {
-      return false;
-    }
-    return matchesQuery(query, market);
-  });
+  const curated = pickFeaturedMarkets(sourceMarkets, limit, now);
+  return hydrateMarkets(curated);
+}
 
-  const prioritized = filtered.sort((a, b) => {
-    const aCreated = resolveCreatedTimestamp(a);
-    const bCreated = resolveCreatedTimestamp(b);
-    if (aCreated !== bCreated) {
-      return bCreated - aCreated;
-    }
-    const aLiquidity = resolveLiquidity(a);
-    const bLiquidity = resolveLiquidity(b);
-    return bLiquidity - aLiquidity;
-  });
-
-  const selected = prioritized.slice(0, limit);
-  const markets = await Promise.all(
-    selected.map(async (market) => {
+async function hydrateMarkets(markets: ClobMarket[]): Promise<Market[]> {
+  return Promise.all(
+    markets.map(async (market) => {
       const primaryToken = market.tokens?.[0];
       let bestBid: number | null = null;
       let bestAsk: number | null = null;
@@ -135,8 +123,6 @@ export async function loadMarketSnapshots(
       } satisfies Market;
     }),
   );
-
-  return markets;
 }
 
 function matchesQuery(query: string, market: ClobMarket) {
@@ -211,6 +197,118 @@ async function fetchSamplingMarkets(): Promise<ClobMarket[]> {
     });
     return [];
   }
+}
+
+async function fetchEligibleMarkets(now: number) {
+  const samplingMarkets = await fetchSamplingMarkets();
+  const fallbackMarkets =
+    samplingMarkets.length === 0 ? ((await clobClient.getMarkets()).data as ClobMarket[]) : [];
+  const sourceMarkets = samplingMarkets.length ? samplingMarkets : fallbackMarkets;
+
+  return sourceMarkets.filter((market) => {
+    if (!market.active) return false;
+    if (market.archived) return false;
+    if (market.closed) return false;
+    if (market.accepting_orders === false) return false;
+    const endTs = resolveEndTimestamp(market.end_date_iso ?? market.endDate);
+    if (endTs && endTs < now - 6 * 60 * 60 * 1000) {
+      return false;
+    }
+    return (market.tokens?.length ?? 0) > 0;
+  });
+}
+
+function pickFeaturedMarkets(markets: ClobMarket[], limit: number, now: number) {
+  const buckets = new Map<string, ClobMarket[]>();
+  markets.forEach((market) => {
+    const category = resolveCategory(market);
+    if (!buckets.has(category)) {
+      buckets.set(category, []);
+    }
+    buckets.get(category)!.push(market);
+  });
+
+  buckets.forEach((bucket) =>
+    bucket.sort((a, b) => resolvePriorityScore(b, now) - resolvePriorityScore(a, now)),
+  );
+
+  const priorityOrder = ['sports', 'entertainment', 'crypto', 'politics', 'macro', 'other'];
+  const selected: ClobMarket[] = [];
+  while (selected.length < limit && buckets.size > 0) {
+    let added = false;
+    for (const category of priorityOrder) {
+      const bucket = buckets.get(category);
+      if (bucket && bucket.length) {
+        selected.push(bucket.shift()!);
+        added = true;
+        if (!bucket.length) {
+          buckets.delete(category);
+        }
+        if (selected.length >= limit) {
+          break;
+        }
+      }
+    }
+    if (!added) {
+      break;
+    }
+  }
+
+  if (selected.length < limit) {
+    const remaining = markets
+      .filter((market) => !selected.includes(market))
+      .sort((a, b) => resolvePriorityScore(b, now) - resolvePriorityScore(a, now));
+    selected.push(...remaining.slice(0, limit - selected.length));
+  }
+
+  return selected.slice(0, limit);
+}
+
+function resolveCategory(market: ClobMarket): string {
+  const tags = (market.tags ?? []).map((tag) => tag.toLowerCase());
+  const question = market.question?.toLowerCase() ?? '';
+  if (
+    tags.some((tag) => ['sports', 'nfl', 'nba', 'ufc', 'mlb', 'nhl'].includes(tag)) ||
+    /\b(nfl|nba|mlb|nhl|soccer|match|game|tournament|fight|odds|vs\.|world cup)\b/.test(question)
+  ) {
+    return 'sports';
+  }
+  if (
+    tags.some((tag) => ['movies', 'music', 'awards', 'culture', 'pop culture'].includes(tag)) ||
+    /\b(oscar|grammy|album|movie|film|tv|celebrity|box office|concert|tour|song|show)\b/.test(
+      question,
+    )
+  ) {
+    return 'entertainment';
+  }
+  if (
+    tags.some((tag) => ['crypto', 'tech', 'ai', 'business', 'ipo'].includes(tag)) ||
+    /\b(bitcoin|ethereum|token|price|stock|ipo|ai|model|coin|fund|rate)\b/.test(question)
+  ) {
+    return 'crypto';
+  }
+  if (
+    tags.some((tag) => ['politics', 'elections', 'trump', 'cabinet', 'senate'].includes(tag)) ||
+    /\b(election|president|senate|congress|primary|governor|parliament|minister)\b/.test(question)
+  ) {
+    return 'politics';
+  }
+  if (
+    tags.some((tag) => ['economy', 'science', 'world'].includes(tag)) ||
+    /\b(inflation|economy|gdp|rate|climate|hurricane|disease|war|peace)\b/.test(question)
+  ) {
+    return 'macro';
+  }
+  return 'other';
+}
+
+function resolvePriorityScore(market: ClobMarket, now: number) {
+  const liquidity = resolveLiquidity(market);
+  const created = resolveCreatedTimestamp(market) || now;
+  const ageHours = Math.max(1, (now - created) / (1000 * 60 * 60));
+  const freshnessScore = 1 / ageHours;
+  const liquidityScore = liquidity ? Math.log10(liquidity + 10) : 0;
+  return liquidityScore * 0.6 + freshnessScore * 0.4;
 }
 
 

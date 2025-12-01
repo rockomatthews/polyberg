@@ -59,6 +59,7 @@ export function WatchlistPanel() {
       setSelection({
         marketId: defaultMarket.conditionId,
         tokenId: defaultMarket.primaryTokenId,
+        question: defaultMarket.question,
       });
     }
   }, [selectedMarketId, defaultMarket, setSelection]);
@@ -140,6 +141,7 @@ export function WatchlistPanel() {
                     setSelection({
                       marketId: market.conditionId,
                       tokenId: market.primaryTokenId,
+                      question: market.question,
                     })
                   }
                   sx={{

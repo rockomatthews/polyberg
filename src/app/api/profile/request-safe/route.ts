@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 
 import { authOptions } from '@/lib/auth';
-import { requestSafeDeployment } from '@/lib/services/safeOnboardingService';
+import { requestSafeDeployment, SafeFeeRequiredError } from '@/lib/services/safeOnboardingService';
 
 export async function POST() {
   const session = await getServerSession(authOptions);
@@ -15,6 +15,9 @@ export async function POST() {
     return NextResponse.json(status);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to request Safe';
+    if (error instanceof SafeFeeRequiredError) {
+      return NextResponse.json({ error: message }, { status: error.status });
+    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

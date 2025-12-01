@@ -4,7 +4,6 @@ import * as React from 'react';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
 import Step from '@mui/material/Step';
 import StepContent from '@mui/material/StepContent';
@@ -20,7 +19,6 @@ type OnboardingWizardProps = {
   hasRelayerSigner: boolean;
   hasSafe: boolean;
   safeStatus?: string | null;
-  canDeploySafe: boolean;
 };
 
 const initialForm = {
@@ -35,23 +33,19 @@ export function OnboardingWizard({
   hasRelayerSigner,
   hasSafe,
   safeStatus,
-  canDeploySafe,
 }: OnboardingWizardProps) {
   const [status, setStatus] = React.useState(() => ({
     hasBuilderSigner,
     hasL2Creds,
     hasRelayerSigner,
   }));
-  const [safeReady, setSafeReady] = React.useState(hasSafe);
+  const safeReady = hasSafe;
   const [form, setForm] = React.useState(initialForm);
-  const [currentSafeStatus, setCurrentSafeStatus] = React.useState(safeStatus ?? null);
+  const currentSafeStatus = safeStatus ?? null;
   const [activeStep, setActiveStep] = React.useState(0);
   const [saving, setSaving] = React.useState(false);
-  const [deploying, setDeploying] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [formSuccess, setFormSuccess] = React.useState<string | null>(null);
-  const [deployError, setDeployError] = React.useState<string | null>(null);
-  const [deploySuccess, setDeploySuccess] = React.useState<string | null>(null);
 
   const refreshStatus = React.useCallback(async () => {
     try {
@@ -104,30 +98,6 @@ export function OnboardingWizard({
       setFormError(error instanceof Error ? error.message : 'Unable to save credentials');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleDeploySafe = async () => {
-    if (!canDeploySafe || safeReady) {
-      return;
-    }
-    setDeploying(true);
-    setDeployError(null);
-    setDeploySuccess(null);
-    try {
-      const response = await fetch('/api/profile/deploy-safe', { method: 'POST' });
-      const json = await response.json();
-      if (!response.ok) {
-        throw new Error(json.error || 'Safe deployment failed');
-      }
-      setSafeReady(true);
-      setCurrentSafeStatus(json.status ?? 'deployed');
-      setDeploySuccess('Safe deployed via builder relayer.');
-      setActiveStep(2);
-    } catch (error) {
-      setDeployError(error instanceof Error ? error.message : 'Unable to deploy Safe');
-    } finally {
-      setDeploying(false);
     }
   };
 
@@ -229,47 +199,16 @@ export function OnboardingWizard({
       ),
     },
     {
-      label: safeReady ? 'Safe ready' : 'Auto-deploy Safe',
+      label: safeReady ? 'Safe ready' : 'Safe onboarding',
       description: safeReady
         ? `Safe ${currentSafeStatus ?? 'ready'}. Fund it with USDC on Polygon to trade.`
-        : 'Use the builder relayer to deploy your dedicated Safe in one click.',
+        : 'Finish the Safe fee + deployment steps inside the Account card above.',
       complete: safeReady,
       content: (
         <Stack spacing={1.5}>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Button
-              variant="contained"
-              startIcon={
-                deploying ? <CircularProgress size={16} color="inherit" /> : undefined
-              }
-              onClick={handleDeploySafe}
-              disabled={!canDeploySafe || deploying || safeReady}
-            >
-              {safeReady ? 'Safe deployed' : 'Deploy my Safe'}
-            </Button>
-            {!canDeploySafe ? (
-              <Chip label="Relayer missing" color="warning" size="small" variant="outlined" />
-            ) : null}
-          </Stack>
-          {deployError ? (
-            <Alert severity="error" variant="outlined">
-              {deployError}
-            </Alert>
-          ) : null}
-          {deploySuccess ? (
-            <Alert severity="success" variant="outlined">
-              {deploySuccess}
-            </Alert>
-          ) : null}
           <Typography variant="body2" color="text.secondary">
-            Prefer manual control? You can also deploy from{' '}
-            <Link
-              href="https://docs.polymarket.com/developers/builders/relayer-client"
-              target="_blank"
-            >
-              the builder relayer CLI
-            </Link>{' '}
-            and paste the Safe address into the Safe panel above.
+            Head to <strong>Account → Safe</strong> to pay the one-time fee and trigger deployment.
+            This step marks itself complete once the Safe is live.
           </Typography>
         </Stack>
       ),

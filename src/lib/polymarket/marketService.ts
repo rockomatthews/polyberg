@@ -1,10 +1,12 @@
 import type { Market } from '@/lib/api/types';
 import { clobClient } from '@/lib/polymarket/clobClient';
 import { logger } from '@/lib/logger';
+import { env } from '@/lib/env';
 
 type ClobToken = {
   token_id?: string;
   outcome?: string;
+  price?: number;
 };
 
 type ClobMarket = {
@@ -15,10 +17,28 @@ type ClobMarket = {
   enable_order_book: boolean;
   active: boolean;
   archived?: boolean;
+  accepting_orders?: boolean;
+  closed?: boolean;
   condition_id: string;
   icon?: string | null;
   image?: string | null;
   end_date_iso?: string | null;
+  endDate?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  startDate?: string | null;
+  liquidity?: string | number | null;
+  liquidityNum?: number | null;
+  events?: Array<{
+    startDate?: string | null;
+    creationDate?: string | null;
+  }>;
+};
+
+type SamplingPayload = {
+  data: ClobMarket[];
+  limit: number;
+  count: number;
 };
 
 export type MarketSnapshotOptions = {
@@ -34,53 +54,37 @@ export async function loadMarketSnapshots(
   const query = normalize(options.query);
   const now = options.now ?? Date.now();
 
-  const payload = await clobClient.getMarkets();
-  const marketsResponse = payload.data as ClobMarket[];
-  const eligible = marketsResponse.filter((market) => {
+  const samplingMarkets = await fetchSamplingMarkets();
+  const fallbackMarkets =
+    samplingMarkets.length === 0 ? ((await clobClient.getMarkets()).data as ClobMarket[]) : [];
+  const sourceMarkets = samplingMarkets.length ? samplingMarkets : fallbackMarkets;
+
+  const eligible = sourceMarkets.filter((market) => {
     if (!market.active) return false;
     if (market.archived) return false;
+    if (market.closed) return false;
+    if (market.accepting_orders === false) return false;
     return (market.tokens?.length ?? 0) > 0;
   });
 
-  const graceMs = 60 * 60 * 1000;
-  const recencyWindowMs = 45 * 24 * 60 * 60 * 1000;
-
-  const liveMarkets = eligible.filter((market) => {
-    const ts = resolveEndTimestamp(market.end_date_iso);
-    if (ts == null) return true;
-    return ts >= now - graceMs;
+  const filtered = eligible.filter((market) => {
+    const endTs = resolveEndTimestamp(market.end_date_iso ?? market.endDate);
+    if (endTs && endTs < now - 6 * 60 * 60 * 1000) {
+      return false;
+    }
+    return matchesQuery(query, market);
   });
 
-  const recentMarkets =
-    liveMarkets.length > 0
-      ? []
-      : eligible.filter((market) => {
-          const ts = resolveEndTimestamp(market.end_date_iso);
-          if (ts == null) return true;
-          return ts >= now - recencyWindowMs;
-        });
-
-  const pool =
-    liveMarkets.length > 0
-      ? { markets: liveMarkets, sort: 'asc' as const }
-      : recentMarkets.length > 0
-        ? { markets: recentMarkets, sort: 'desc' as const }
-        : { markets: eligible, sort: 'desc' as const };
-
-  const prioritized = pool.markets
-    .filter((market) => matchesQuery(query, market))
-    .sort((a, b) => {
-      const aTs = resolveEndTimestamp(a.end_date_iso);
-      const bTs = resolveEndTimestamp(b.end_date_iso);
-      if (pool.sort === 'asc') {
-        const aRank = aTs ?? Number.POSITIVE_INFINITY;
-        const bRank = bTs ?? Number.POSITIVE_INFINITY;
-        return aRank - bRank;
-      }
-      const aRank = aTs ?? Number.NEGATIVE_INFINITY;
-      const bRank = bTs ?? Number.NEGATIVE_INFINITY;
-      return bRank - aRank;
-    });
+  const prioritized = filtered.sort((a, b) => {
+    const aCreated = resolveCreatedTimestamp(a);
+    const bCreated = resolveCreatedTimestamp(b);
+    if (aCreated !== bCreated) {
+      return bCreated - aCreated;
+    }
+    const aLiquidity = resolveLiquidity(a);
+    const bLiquidity = resolveLiquidity(b);
+    return bLiquidity - aLiquidity;
+  });
 
   const selected = prioritized.slice(0, limit);
   const markets = await Promise.all(
@@ -154,12 +158,59 @@ function resolveEndTimestamp(value?: string | null) {
   return Number.isNaN(ts) ? null : ts;
 }
 
+function resolveCreatedTimestamp(market: ClobMarket) {
+  const candidates = [
+    market.createdAt,
+    market.updatedAt,
+    market.startDate,
+    market.events?.[0]?.startDate,
+    market.events?.[0]?.creationDate,
+    market.end_date_iso,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const ts = Date.parse(candidate);
+    if (!Number.isNaN(ts)) {
+      return ts;
+    }
+  }
+  return 0;
+}
+
+function resolveLiquidity(market: ClobMarket) {
+  if (typeof market.liquidity === 'number') return market.liquidity;
+  if (typeof market.liquidity === 'string') return Number(market.liquidity);
+  if (typeof market.liquidityNum === 'number') return market.liquidityNum;
+  return 0;
+}
+
 function clampLimit(value: number) {
   return Math.min(Math.max(value, 1), 25);
 }
 
 function normalize(text?: string | null) {
   return text?.toLowerCase().trim() ?? '';
+}
+
+async function fetchSamplingMarkets(): Promise<ClobMarket[]> {
+  try {
+    const response = await fetch(`${env.polymarketApiHost}/sampling-markets`, {
+      headers: {
+        'User-Agent': 'polyberg-market-fetch/1.0',
+      },
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      throw new Error(`Sampling markets request failed with ${response.status}`);
+    }
+    const payload = (await response.json()) as SamplingPayload;
+    return payload.data ?? [];
+  } catch (error) {
+    logger.error('markets.sampling.failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
 }
 
 

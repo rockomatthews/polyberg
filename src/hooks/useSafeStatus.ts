@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export type SafeStatusResponse = {
-  state: 'disabled' | 'missing' | 'pending' | 'ready' | 'error';
+  state: 'disabled' | 'fee-required' | 'missing' | 'pending' | 'ready' | 'error';
   safeAddress: string | null;
   statusLabel: string;
   deploymentTxHash?: string | null;
@@ -12,6 +12,10 @@ export type SafeStatusResponse = {
     url?: string | null;
   };
   requireSafe: boolean;
+  setupFeePaid: boolean;
+  feeUsd: number;
+  feeTxHash?: string | null;
+  treasuryAddress?: string | null;
 };
 
 async function fetchSafeStatus(): Promise<SafeStatusResponse> {
@@ -28,6 +32,19 @@ async function requestSafe(): Promise<SafeStatusResponse> {
   const json = await response.json();
   if (!response.ok) {
     throw new Error(json.error || 'Safe deployment failed');
+  }
+  return json;
+}
+
+async function confirmSafeFee(txHash?: string): Promise<SafeStatusResponse> {
+  const response = await fetch('/api/profile/safe-fee', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ txHash }),
+  });
+  const json = await response.json();
+  if (!response.ok) {
+    throw new Error(json.error || 'Unable to confirm Safe fee');
   }
   return json;
 }
@@ -49,12 +66,21 @@ export function useSafeStatus() {
     },
   });
 
+  const feeMutation = useMutation({
+    mutationKey: ['safe-fee'],
+    mutationFn: confirmSafeFee,
+    onSuccess: (data) => {
+      queryClient.setQueryData(['safe-status'], data);
+    },
+  });
+
   return {
     safeStatus: statusQuery.data,
     safeLoading: statusQuery.isLoading,
     safeError: statusQuery.error,
     refetchSafe: statusQuery.refetch,
     requestSafe: requestMutation,
+    confirmFee: feeMutation,
   };
 }
 

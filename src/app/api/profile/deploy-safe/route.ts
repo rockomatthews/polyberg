@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { hasRelayClient } from '@/lib/relayer/relayClient';
 import { logger } from '@/lib/logger';
-import { requestSafeDeployment } from '@/lib/services/safeOnboardingService';
+import { requestSafeDeployment, SafeFeeRequiredError } from '@/lib/services/safeOnboardingService';
 
 export async function POST() {
   if (!hasRelayClient) {
@@ -27,6 +27,9 @@ export async function POST() {
     logger.error('safe.deploy.failed', {
       error: message,
     });
+    if (error instanceof SafeFeeRequiredError) {
+      return NextResponse.json({ error: message }, { status: error.status });
+    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

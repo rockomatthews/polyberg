@@ -22,6 +22,8 @@ const envSchema = z.object({
   POLYMARKET_COLLATERAL_ADDRESS: z.string().optional(),
   POLYMARKET_REQUIRE_SAFE: z.coerce.boolean().optional(),
   AUTONOMY_DISABLED: z.coerce.boolean().optional(),
+  SERVICE_TREASURY_ADDRESS: z.string().optional(),
+  SAFE_DEPLOYMENT_FEE_USDC: z.coerce.number().optional(),
   PINECONE_API_KEY: z.string().optional(),
   PINECONE_INDEX: z.string().optional(),
   PINECONE_NAMESPACE: z.string().optional(),
@@ -78,6 +80,8 @@ export const env = {
   collateralAddress: data.POLYMARKET_COLLATERAL_ADDRESS ?? '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
   requireSafe: data.POLYMARKET_REQUIRE_SAFE ?? true,
   autonomyDisabled: data.AUTONOMY_DISABLED ?? false,
+  serviceTreasuryAddress: data.SERVICE_TREASURY_ADDRESS,
+  safeDeploymentFeeUsd: data.SAFE_DEPLOYMENT_FEE_USDC ?? 5,
   pinecone:
     data.PINECONE_API_KEY && data.PINECONE_INDEX
       ? {

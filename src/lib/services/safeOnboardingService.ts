@@ -4,10 +4,18 @@ import { ensureRelayClient, hasRelayClient } from '@/lib/relayer/relayClient';
 import { getUserSafe, upsertUserSafe, type UserSafeRecord } from '@/lib/services/userService';
 import { logger } from '@/lib/logger';
 import { hasDatabase } from '@/lib/db';
+import { getSafeFeeRecord } from '@/lib/services/safeFeeService';
 
 const CACHE_TTL_SECONDS = 30;
+const FEE_USD = env.safeDeploymentFeeUsd ?? 5;
 
-export type SafeStatusState = 'disabled' | 'missing' | 'pending' | 'ready' | 'error';
+export type SafeStatusState =
+  | 'disabled'
+  | 'fee-required'
+  | 'missing'
+  | 'pending'
+  | 'ready'
+  | 'error';
 
 export type SafeStatusPayload = {
   state: SafeStatusState;
@@ -21,12 +29,24 @@ export type SafeStatusPayload = {
     url?: string | null;
   };
   requireSafe: boolean;
+  setupFeePaid: boolean;
+  feeUsd: number;
+  feeTxHash?: string | null;
+  treasuryAddress?: string | null;
 };
 
 type CachePayload = SafeStatusPayload & { cachedAt: number };
 
 function cacheKey(userId: string) {
   return `safe:status:${userId}`;
+}
+
+export class SafeFeeRequiredError extends Error {
+  status = 402;
+  constructor(message = 'Safe setup fee required') {
+    super(message);
+    this.name = 'SafeFeeRequiredError';
+  }
 }
 
 export async function getSafeStatus(userId: string): Promise<SafeStatusPayload> {
@@ -37,6 +57,9 @@ export async function getSafeStatus(userId: string): Promise<SafeStatusPayload> 
       statusLabel: 'Relayer not configured',
       relayer: { configured: false, url: env.relayerUrl ?? null },
       requireSafe: requiresSafe,
+      setupFeePaid: true,
+      feeUsd: FEE_USD,
+      treasuryAddress: env.serviceTreasuryAddress ?? null,
     };
   }
 
@@ -45,8 +68,19 @@ export async function getSafeStatus(userId: string): Promise<SafeStatusPayload> 
     return cached;
   }
 
+  const feeRecord = await getSafeFeeRecord(userId);
+  const setupFeePaid = !requiresSafe || Boolean(feeRecord?.paid);
+
+  if (!setupFeePaid) {
+    const status = buildFeeRequiredStatus(feeRecord?.tx_hash ?? null);
+    await writeCache(userId, status);
+    return status;
+  }
+
   const record = await getUserSafe(userId);
-  const status = record ? mapRecordToStatus(record) : buildMissingStatus();
+  const status = record
+    ? mapRecordToStatus(record, feeRecord?.tx_hash ?? null)
+    : buildMissingStatus(true, feeRecord?.tx_hash ?? null);
 
   await writeCache(userId, status);
   return status;
@@ -60,9 +94,15 @@ export async function requestSafeDeployment(userId: string): Promise<SafeStatusP
     throw new Error('Database is required to track Safe deployments.');
   }
 
+  const feeRecord = await getSafeFeeRecord(userId);
+  const setupFeePaid = !requiresSafe || Boolean(feeRecord?.paid);
+  if (!setupFeePaid) {
+    throw new SafeFeeRequiredError('Safe setup fee must be paid before deployment.');
+  }
+
   const existing = await getUserSafe(userId);
   if (existing?.safe_address) {
-    const status = mapRecordToStatus(existing);
+    const status = mapRecordToStatus(existing, feeRecord?.tx_hash ?? null);
     await writeCache(userId, status);
     return status;
   }
@@ -92,32 +132,61 @@ export async function requestSafeDeployment(userId: string): Promise<SafeStatusP
   });
 
   const updated = await getUserSafe(userId);
-  const status = updated ? mapRecordToStatus(updated) : buildMissingStatus();
+  const status = updated
+    ? mapRecordToStatus(updated, feeRecord?.tx_hash ?? null)
+    : buildMissingStatus(true, feeRecord?.tx_hash ?? null);
   await writeCache(userId, status);
   logger.info('safe.request.complete', { userId, safe: status.safeAddress });
   return status;
 }
 
-function buildMissingStatus(): SafeStatusPayload {
-  if (env.safeAddress) {
+function buildFeeRequiredStatus(txHash: string | null): SafeStatusPayload {
+  return {
+    state: 'fee-required',
+    safeAddress: null,
+    statusLabel: `One-time $${FEE_USD.toFixed(2)} Safe fee required`,
+    relayer: { configured: hasRelayer && hasRelayClient, url: env.relayerUrl ?? null },
+    requireSafe: requiresSafe,
+    setupFeePaid: false,
+    feeUsd: FEE_USD,
+    feeTxHash: txHash ?? undefined,
+    treasuryAddress: env.serviceTreasuryAddress ?? null,
+  };
+}
+
+function buildMissingStatus(
+  feePaid: boolean,
+  txHash: string | null,
+): SafeStatusPayload {
+  if (!requiresSafe && env.safeAddress) {
     return {
       state: 'ready',
       safeAddress: env.safeAddress,
       statusLabel: 'Using builder Safe',
       relayer: { configured: hasRelayer && hasRelayClient, url: env.relayerUrl ?? null },
       requireSafe: requiresSafe,
+      setupFeePaid: true,
+      feeUsd: FEE_USD,
+      treasuryAddress: env.serviceTreasuryAddress ?? null,
     };
   }
   return {
     state: 'missing',
     safeAddress: null,
-    statusLabel: 'Safe not requested',
+    statusLabel: feePaid ? 'Safe not deployed yet' : 'Safe not requested',
     relayer: { configured: hasRelayer && hasRelayClient, url: env.relayerUrl ?? null },
     requireSafe: requiresSafe,
+    setupFeePaid: feePaid,
+    feeUsd: FEE_USD,
+    feeTxHash: txHash ?? undefined,
+    treasuryAddress: env.serviceTreasuryAddress ?? null,
   };
 }
 
-function mapRecordToStatus(record: UserSafeRecord): SafeStatusPayload {
+function mapRecordToStatus(
+  record: UserSafeRecord,
+  txHash: string | null,
+): SafeStatusPayload {
   const normalizedState = normalizeState(record.status);
   return {
     state: normalizedState,
@@ -128,6 +197,10 @@ function mapRecordToStatus(record: UserSafeRecord): SafeStatusPayload {
     updatedAt: record.updated_at,
     relayer: { configured: hasRelayer && hasRelayClient, url: env.relayerUrl ?? null },
     requireSafe: requiresSafe,
+    setupFeePaid: true,
+    feeUsd: FEE_USD,
+    feeTxHash: txHash ?? undefined,
+    treasuryAddress: env.serviceTreasuryAddress ?? null,
   };
 }
 

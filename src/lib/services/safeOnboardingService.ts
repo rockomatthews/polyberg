@@ -72,9 +72,11 @@ export async function requestSafeDeployment(userId: string): Promise<SafeStatusP
   const client = ensureRelayClient('deploy Safe');
   logger.info('safe.request.start', { userId });
   let relayerTx;
+  let transactionID: string | null = null;
   try {
-    const response = await client.deploy();
-    relayerTx = await response.wait();
+    const deployResponse = await client.deploy();
+    transactionID = deployResponse.transactionID;
+    relayerTx = await deployResponse.wait();
   } catch (error) {
     const recovered = await recoverExistingSafe(userId, error);
     if (recovered) {
@@ -87,7 +89,7 @@ export async function requestSafeDeployment(userId: string): Promise<SafeStatusP
     logger.error('safe.request.missingAddress', {
       userId,
       state: relayerTx?.state,
-      transactionID: response.transactionID,
+      transactionID,
     });
     throw new Error('Relayer did not return a Safe address');
   }
@@ -98,7 +100,7 @@ export async function requestSafeDeployment(userId: string): Promise<SafeStatusP
     status: relayerTx.state ?? 'deployed',
     ownershipType: 'per-user',
     metadata: {
-      taskId: response.transactionID,
+      taskId: transactionID,
       relayerUrl: env.relayerUrl ?? null,
     },
   });

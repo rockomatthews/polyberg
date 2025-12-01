@@ -73,7 +73,7 @@ export async function clearManagedPosition(tokenId: string) {
 
 async function readRegistry() {
   if (redisClient) {
-    const entries = await redisClient.hgetall<string>(REGISTRY_KEY);
+    const entries = await redisClient.hgetall<Record<string, string>>(REGISTRY_KEY);
     if (!entries) {
       return new Map<string, ManagedPositionRecord>();
     }

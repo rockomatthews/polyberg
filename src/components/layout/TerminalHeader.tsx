@@ -96,6 +96,12 @@ function MarketSearchInput({ fullWidth }: MarketSearchInputProps) {
         size="small"
         value={value}
         onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && results.length > 0) {
+            event.preventDefault();
+            handleSelect(results[0]);
+          }
+        }}
         onFocus={() => setFocused(true)}
         onBlur={() => {
           setTimeout(() => setFocused(false), 120);

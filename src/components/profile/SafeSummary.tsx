@@ -9,7 +9,6 @@ import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
-import TextField from '@mui/material/TextField';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
 import { useSafeStatus } from '@/hooks/useSafeStatus';
@@ -19,14 +18,12 @@ type SafeSummaryProps = {
 };
 
 export function SafeSummary({ collateralAddress }: SafeSummaryProps) {
-  const { safeStatus, safeLoading, requestSafe, confirmFee } = useSafeStatus();
+  const { safeStatus, safeLoading, requestSafe } = useSafeStatus();
   const safeAddress = safeStatus?.safeAddress ?? null;
   const [balance, setBalance] = React.useState<number | null>(null);
   const [loadingBalance, setLoadingBalance] = React.useState(false);
   const [balanceError, setBalanceError] = React.useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = React.useState<Date | null>(null);
-  const [txHashInput, setTxHashInput] = React.useState('');
-  const [feeError, setFeeError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     let active = true;
@@ -70,18 +67,6 @@ export function SafeSummary({ collateralAddress }: SafeSummaryProps) {
     }
   }, [safeAddress]);
 
-  const handleConfirmFee = React.useCallback(() => {
-    setFeeError(null);
-    confirmFee.mutate(txHashInput.trim() || undefined, {
-      onSuccess: () => {
-        setTxHashInput('');
-      },
-      onError: (error) => {
-        setFeeError(error instanceof Error ? error.message : 'Unable to confirm payment');
-      },
-    });
-  }, [confirmFee, txHashInput]);
-
   if (safeLoading) {
     return (
       <Stack direction="row" spacing={1} alignItems="center" mt={2}>
@@ -108,44 +93,6 @@ export function SafeSummary({ collateralAddress }: SafeSummaryProps) {
     );
   }
 
-  if (safeStatus.state === 'fee-required') {
-    return (
-      <Stack spacing={1.5} mt={2}>
-        <Stack direction="row" spacing={1} alignItems="center">
-          <Typography variant="subtitle2">Safe</Typography>
-          <Chip label="Fee required" color="warning" size="small" variant="outlined" />
-        </Stack>
-        <Alert severity="info" variant="outlined">
-          Send ${safeStatus.feeUsd.toFixed(2)} USDC on Polygon to{' '}
-          <Typography component="span" fontFamily="monospace">
-            {safeStatus.treasuryAddress ?? 'your treasury Safe'}
-          </Typography>
-          . After paying, paste the transaction hash below to unlock Safe deployment.
-        </Alert>
-        <TextField
-          label="Payment Tx Hash (optional)"
-          size="small"
-          value={txHashInput}
-          onChange={(event) => setTxHashInput(event.target.value)}
-          placeholder="0x..."
-        />
-        <Button
-          variant="contained"
-          size="small"
-          onClick={handleConfirmFee}
-          disabled={confirmFee.isPending}
-        >
-          {confirmFee.isPending ? 'Confirming…' : `I paid $${safeStatus.feeUsd.toFixed(2)}`}
-        </Button>
-        {feeError ? (
-          <Alert severity="error" variant="outlined">
-            {feeError}
-          </Alert>
-        ) : null}
-      </Stack>
-    );
-  }
-
   if (safeStatus.state === 'missing') {
     return (
       <Stack spacing={1.5} mt={2}>
@@ -154,25 +101,16 @@ export function SafeSummary({ collateralAddress }: SafeSummaryProps) {
           <Chip label="Not connected" color="warning" size="small" variant="outlined" />
         </Stack>
         <Typography variant="body2" color="text.secondary">
-          {safeStatus.setupFeePaid
-            ? 'Fee received. Deploy your dedicated Safe to start gasless sniping.'
-            : 'Deploy a dedicated Safe wallet to route all trades gaslessly.'}
+          Deploy a dedicated Safe wallet to route all trades gaslessly.
         </Typography>
-        {safeStatus.feeTxHash ? (
-          <Typography variant="caption" color="text.secondary">
-            Last payment tx: {safeStatus.feeTxHash.slice(0, 10)}…{safeStatus.feeTxHash.slice(-6)}
-          </Typography>
-        ) : null}
-        {safeStatus.setupFeePaid ? (
-          <Button
-            variant="contained"
-            size="small"
-            onClick={() => requestSafe.mutate()}
-            disabled={requestSafe.isPending}
-          >
-            {requestSafe.isPending ? 'Requesting…' : 'Deploy my Safe'}
-          </Button>
-        ) : null}
+        <Button
+          variant="contained"
+          size="small"
+          onClick={() => requestSafe.mutate()}
+          disabled={requestSafe.isPending}
+        >
+          {requestSafe.isPending ? 'Deploying…' : 'Deploy Safe'}
+        </Button>
         {requestSafe.isError ? (
           <Alert severity="error" variant="outlined">
             {requestSafe.error instanceof Error ? requestSafe.error.message : 'Safe request failed'}
@@ -256,11 +194,6 @@ export function SafeSummary({ collateralAddress }: SafeSummaryProps) {
         Fund this Safe via Polygon USDC ({collateralAddress}) and the relayer will execute snipes
         gaslessly on your behalf.
       </Typography>
-      {safeStatus.feeTxHash ? (
-        <Typography variant="caption" color="text.secondary">
-          Setup fee tx: {safeStatus.feeTxHash.slice(0, 10)}…{safeStatus.feeTxHash.slice(-6)}
-        </Typography>
-      ) : null}
     </Stack>
   );
 }

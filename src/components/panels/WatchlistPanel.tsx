@@ -9,6 +9,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
+import Box from '@mui/material/Box';
 import StarOutlineIcon from '@mui/icons-material/StarOutline';
 import StarIcon from '@mui/icons-material/Star';
 
@@ -16,6 +17,7 @@ import { PanelCard } from './PanelCard';
 import { useMarketsData } from '@/hooks/useTerminalData';
 import { useTerminalStore } from '@/state/useTerminalStore';
 import { useUserWatchlist } from '@/hooks/useWatchlist';
+import type { Market } from '@/lib/api/types';
 
 const getTimeLeftLabel = (endDate: string | null) => {
   if (!endDate) return '––';
@@ -67,19 +69,22 @@ export function WatchlistPanel() {
     return [...favorites, ...others];
   }, [markets, watchlist]);
 
-  const displayMarkets = React.useMemo(() => {
-    if (favoritesOnly) {
-      return sortedMarkets.filter((market) => watchlist.includes(market.conditionId));
-    }
-    return sortedMarkets.length ? sortedMarkets : markets;
-  }, [favoritesOnly, sortedMarkets, markets, watchlist]);
-
   const autoMarkets = React.useMemo(() => {
     if (watchlist.length > 0) {
       return [];
     }
-    return markets.slice(0, 3);
+    return pickFeaturedMarkets(markets, 12);
   }, [markets, watchlist]);
+
+  const gridMarkets = React.useMemo(() => {
+    if (favoritesOnly) {
+      return sortedMarkets.filter((market) => watchlist.includes(market.conditionId));
+    }
+    if (sortedMarkets.length) {
+      return sortedMarkets;
+    }
+    return autoMarkets;
+  }, [favoritesOnly, sortedMarkets, watchlist, autoMarkets]);
 
   return (
     <PanelCard title="Watchlist" subtitle="Markets">
@@ -101,120 +106,109 @@ export function WatchlistPanel() {
             Unable to load your watchlist. Refresh or check your session.
           </Alert>
         ) : null}
-        {autoMarkets.length > 0 ? (
+        {autoMarkets.length > 0 && !watchlist.length ? (
           <Alert severity="info" variant="outlined">
-            Showing the top {autoMarkets.length} trending markets from Polymarket. Star any of them
-            to pin to your personal watchlist.
+            Showing a rotating mix of trending Polymarket markets. Star any card to pin it to your
+            watchlist.
           </Alert>
         ) : null}
         {isFetching && !markets.length ? (
-          <Skeleton variant="rounded" height={140} />
+          <Skeleton variant="rounded" height={220} />
         ) : (
-          displayMarkets.map((market) => {
-            const isActive = market.conditionId === selectedMarketId;
-            const spreadLabel =
-              market.spread != null ? `${market.spread.toFixed(2)}¢` : '––';
-            const isFavorite = watchlist.includes(market.conditionId);
-            return (
-              <Stack
-                key={market.conditionId}
-                direction="row"
-                spacing={1}
-                alignItems="center"
-                onClick={() =>
-                  setSelection({
-                    marketId: market.conditionId,
-                    tokenId: market.primaryTokenId,
-                  })
-                }
-                sx={{
-                  padding: 1,
-                  borderRadius: 1,
-                  bgcolor: isActive ? 'rgba(77,208,225,0.08)' : 'rgba(255,255,255,0.02)',
-                  border: `1px solid ${
-                    isActive ? 'rgba(77,208,225,0.4)' : 'rgba(255,255,255,0.04)'
-                  }`,
-                  cursor: 'pointer',
-                  transition: 'border-color 120ms ease',
-                }}
-              >
-                <Stack flex={1}>
-                  <Typography variant="subtitle2">{market.question}</Typography>
-                  <Stack direction="row" spacing={1} alignItems="center">
+          <Box
+            sx={{
+              display: 'grid',
+              gap: 1.5,
+              gridTemplateColumns: {
+                xs: '1fr',
+                sm: 'repeat(2, minmax(0, 1fr))',
+                md: 'repeat(3, minmax(0, 1fr))',
+                xl: 'repeat(4, minmax(0, 1fr))',
+              },
+            }}
+          >
+            {gridMarkets.map((market) => {
+              const isActive = market.conditionId === selectedMarketId;
+              const spreadLabel =
+                market.spread != null ? `${market.spread.toFixed(2)}¢` : '––';
+              const isFavorite = watchlist.includes(market.conditionId);
+              return (
+                <Stack
+                  key={market.conditionId}
+                  spacing={1}
+                  onClick={() =>
+                    setSelection({
+                      marketId: market.conditionId,
+                      tokenId: market.primaryTokenId,
+                    })
+                  }
+                  sx={{
+                    p: 1.25,
+                    borderRadius: 1.2,
+                    bgcolor: isActive ? 'rgba(77,208,225,0.08)' : 'rgba(255,255,255,0.02)',
+                    border: `1px solid ${
+                      isActive ? 'rgba(77,208,225,0.4)' : 'rgba(255,255,255,0.04)'
+                    }`,
+                    cursor: 'pointer',
+                    minHeight: 140,
+                    transition: 'border-color 120ms ease, transform 120ms ease',
+                    '&:hover': {
+                      borderColor: 'rgba(77,208,225,0.4)',
+                      transform: 'translateY(-2px)',
+                    },
+                  }}
+                >
+                  <Stack direction="row" spacing={1} alignItems="flex-start">
+                    <Stack flex={1} spacing={0.5}>
+                      <Typography variant="subtitle2" sx={{ minHeight: 48 }}>
+                        {market.question}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {market.tag || 'General'}
+                      </Typography>
+                    </Stack>
+                    <Tooltip title={isFavorite ? 'Remove from watchlist' : 'Add to watchlist'}>
+                      <IconButton
+                        size="small"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleWatchlist(market.conditionId, !isFavorite);
+                        }}
+                      >
+                        {isFavorite ? (
+                          <StarIcon fontSize="small" color="warning" />
+                        ) : (
+                          <StarOutlineIcon fontSize="small" />
+                        )}
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                     <Chip size="small" label={`Spread ${spreadLabel}`} />
+                    <Chip size="small" variant="outlined" label={`${getTimeLeftLabel(market.endDate)} left`} />
+                  </Stack>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Typography variant="body2">
+                      Bid {formatPrice(market.bestBid)} / Ask {formatPrice(market.bestAsk)}
+                    </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      {getTimeLeftLabel(market.endDate)} left
+                      Liquidity {formatLiquidity(market.liquidity)}
                     </Typography>
                   </Stack>
                 </Stack>
-                <Stack alignItems="flex-end">
-                  <Typography variant="body2">
-                    Bid {formatPrice(market.bestBid)} / Ask {formatPrice(market.bestAsk)}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Liquidity {formatLiquidity(market.liquidity)}
-                  </Typography>
-                </Stack>
-                <Tooltip title={isFavorite ? 'Remove from watchlist' : 'Add to watchlist'}>
-                  <IconButton
-                    size="small"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      toggleWatchlist(market.conditionId, !isFavorite);
-                    }}
-                  >
-                    {isFavorite ? (
-                      <StarIcon fontSize="small" color="warning" />
-                    ) : (
-                      <StarOutlineIcon fontSize="small" />
-                    )}
-                  </IconButton>
-                </Tooltip>
-              </Stack>
-            );
-          })
+              );
+            })}
+          </Box>
         )}
-        {favoritesOnly && displayMarkets.length === 0 ? (
+        {favoritesOnly && gridMarkets.length === 0 ? (
           <Typography variant="caption" color="text.secondary">
             No starred markets yet. Click the star icon to pin favorites.
           </Typography>
         ) : null}
-        {!isFetching && watchlist.length === 0 ? (
+        {!isFetching && watchlist.length === 0 && autoMarkets.length === 0 ? (
           <Typography variant="caption" color="text.secondary">
             Tap the star icon or use the search bar to build a personalized watchlist.
           </Typography>
-        ) : null}
-        {autoMarkets.length > 0 ? (
-          <Stack spacing={1}>
-            {autoMarkets.map((market) => (
-              <Stack
-                key={`auto-${market.conditionId}`}
-                direction="row"
-                spacing={1}
-                alignItems="center"
-                onClick={() =>
-                  setSelection({
-                    marketId: market.conditionId,
-                    tokenId: market.primaryTokenId,
-                  })
-                }
-                sx={{
-                  padding: 1,
-                  borderRadius: 1,
-                  border: '1px dashed rgba(255,255,255,0.2)',
-                  cursor: 'pointer',
-                }}
-              >
-                <Stack flex={1}>
-                  <Typography variant="subtitle2">{market.question}</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Auto-suggested · liquidity {formatLiquidity(market.liquidity)}
-                  </Typography>
-                </Stack>
-                <Chip size="small" label="Popular now" color="primary" variant="outlined" />
-              </Stack>
-            ))}
-          </Stack>
         ) : null}
       </Stack>
       <LinearProgress
@@ -227,4 +221,42 @@ export function WatchlistPanel() {
       </Typography>
     </PanelCard>
   );
+}
+
+function pickFeaturedMarkets(markets: Market[] = [], count = 12) {
+  const byTag = new Map<string, typeof markets>();
+  markets.forEach((market) => {
+    const tag = (market.tag ?? 'General').toLowerCase();
+    if (!byTag.has(tag)) {
+      byTag.set(tag, []);
+    }
+    byTag.get(tag)!.push(market);
+  });
+  const tags = shuffle(Array.from(byTag.keys()));
+  const selected: typeof markets = [];
+  if (tags.length === 0) {
+    return markets.slice(0, count);
+  }
+  let index = 0;
+  while (selected.length < count && tags.length > 0) {
+    const tag = tags[index % tags.length];
+    const bucket = byTag.get(tag);
+    if (bucket && bucket.length) {
+      selected.push(bucket.shift()!);
+      index++;
+    } else {
+      byTag.delete(tag);
+      tags.splice(index % tags.length, 1);
+    }
+  }
+  return selected;
+}
+
+function shuffle<T>(input: T[]): T[] {
+  const arr = [...input];
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
 }

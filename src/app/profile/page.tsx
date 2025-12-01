@@ -16,23 +16,15 @@ import { authOptions } from '@/lib/auth';
 import {
   ensureUserRecord,
   getUserRecord,
-  getUserSafe,
   type UserRecord,
-  type UserSafeRecord,
 } from '@/lib/services/userService';
-import { env, hasBuilderSigning, hasL2Auth, hasOrderSigner, hasRelayer } from '@/lib/env';
+import { env, hasBuilderSigning, hasL2Auth, hasOrderSigner } from '@/lib/env';
 import { SignOutButton } from '@/components/auth/SignOutButton';
 import {
   listCopilotEntries,
   type CopilotEntry,
 } from '@/lib/services/copilotService';
-import {
-  getUserCredentialStatus,
-  type UserCredentialStatus,
-} from '@/lib/services/userCredentialsService';
 import { CredentialPanel } from '@/components/profile/CredentialPanel';
-import { OnboardingWizard } from '@/components/profile/OnboardingWizard';
-import { BuilderStatusPanel } from '@/components/profile/BuilderStatusPanel';
 import { SafeSummary } from '@/components/profile/SafeSummary';
 import { StrategyAdminPanel } from '@/components/profile/StrategyAdminPanel';
 import { logger } from '@/lib/logger';
@@ -44,31 +36,15 @@ function formatTimestamp(timestamp?: string) {
 
 async function loadUser(): Promise<{
   sessionUser: UserRecord | null;
-  sessionSafe: UserSafeRecord | null;
   copilotHistory: CopilotEntry[];
   sessionEmail?: string;
   sessionName?: string;
-  credentialStatus: UserCredentialStatus;
 }> {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     redirect('/');
   }
-  let credentialStatus: UserCredentialStatus = {
-    hasBuilderSigner: false,
-    hasL2Creds: false,
-    hasRelayerSigner: false,
-  };
-  try {
-    const status = await getUserCredentialStatus(session.user.id);
-    credentialStatus = status.status;
-  } catch (error) {
-    logger.error('profile.credentials.failed', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
   let record: UserRecord | null = null;
-  let safeRecord: UserSafeRecord | null = null;
   let history: CopilotEntry[] = [];
 
   try {
@@ -76,14 +52,6 @@ async function loadUser(): Promise<{
     record = await getUserRecord(session.user.id);
   } catch (error) {
     logger.error('profile.userRecord.failed', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-
-  try {
-    safeRecord = await getUserSafe(session.user.id);
-  } catch (error) {
-    logger.error('profile.userSafe.failed', {
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -98,24 +66,14 @@ async function loadUser(): Promise<{
 
   return {
     sessionUser: record,
-    sessionSafe: safeRecord,
     copilotHistory: history,
     sessionEmail: session.user.email ?? record?.email ?? undefined,
     sessionName: session.user.name ?? record?.name ?? undefined,
-    credentialStatus,
   };
 }
 
 export default async function ProfilePage() {
-  const { sessionUser, sessionSafe, copilotHistory, sessionEmail, sessionName, credentialStatus } =
-    await loadUser();
-
-  const builderStatuses = [
-    { label: 'Builder signer', ok: hasBuilderSigning || credentialStatus.hasBuilderSigner },
-    { label: 'L2 API creds', ok: hasL2Auth || credentialStatus.hasL2Creds },
-    { label: 'Order signer', ok: hasOrderSigner || credentialStatus.hasRelayerSigner },
-    { label: 'Relayer URL', ok: hasRelayer || credentialStatus.hasRelayerSigner },
-  ];
+  const { sessionUser, copilotHistory, sessionEmail, sessionName } = await loadUser();
 
   return (
     <Container maxWidth="md" sx={{ py: 6 }}>
@@ -149,39 +107,6 @@ export default async function ProfilePage() {
               </Stack>
             </Stack>
             <SafeSummary collateralAddress={env.collateralAddress} />
-          </CardContent>
-        </Card>
-
-        <Card variant="outlined">
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Builder Onboarding Wizard
-            </Typography>
-            <Typography variant="body2" color="text.secondary" paragraph>
-              Track the end-to-end checklist every trader must complete before firing gasless snipes.
-              Steps mark themselves complete as you configure credentials, deploy a Safe, and pass the
-              health check.
-            </Typography>
-            <OnboardingWizard
-              hasBuilderSigner={hasBuilderSigning || credentialStatus.hasBuilderSigner}
-              hasL2Creds={hasL2Auth || credentialStatus.hasL2Creds}
-              hasRelayerSigner={credentialStatus.hasRelayerSigner}
-              hasSafe={Boolean(sessionSafe?.safe_address)}
-              safeStatus={sessionSafe?.status}
-            />
-          </CardContent>
-        </Card>
-
-        <Card variant="outlined">
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Builder Connectivity
-            </Typography>
-            <Typography variant="body2" color="text.secondary" paragraph>
-              These toggles reflect the global environment configuration. All traders inherit these
-              settings until per-user Safes are deployed.
-            </Typography>
-            <BuilderStatusPanel fallbackStatuses={builderStatuses} />
           </CardContent>
         </Card>
 

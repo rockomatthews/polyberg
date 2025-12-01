@@ -1,7 +1,14 @@
 'use client';
 
+import * as React from 'react';
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
+import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import IconButton from '@mui/material/IconButton';
+import CloseIcon from '@mui/icons-material/Close';
 
 import { TerminalHeader } from './TerminalHeader';
 import { HealthHeroBanner } from './HealthHeroBanner';
@@ -15,6 +22,9 @@ import { ActivityPanel } from '../panels/ActivityPanel';
 import { StrategyCopilot } from '../panels/StrategyCopilot';
 
 export function AppShell() {
+  const [positionsOpen, setPositionsOpen] = React.useState(false);
+  const [blotterOpen, setBlotterOpen] = React.useState(false);
+
   return (
     <Box
       sx={{
@@ -40,28 +50,27 @@ export function AppShell() {
           gridTemplateColumns: {
             xs: '1fr',
             md: 'minmax(0, 1fr) minmax(0, 1fr)',
-            lg: '320px minmax(0, 1.4fr) 360px',
+            lg: 'minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr)',
           },
           gridTemplateAreas: {
             xs: `
-              "ticket"
               "watch"
+              "ticket"
               "alerts"
               "ladder"
               "activity"
-              "side"
             `,
             md: `
+              "watch watch"
               "ticket ladder"
-              "watch ladder"
               "alerts ladder"
-              "activity side"
+              "activity ladder"
             `,
             lg: `
-              "ticket ladder side"
-              "watch ladder side"
-              "alerts ladder side"
-              "activity ladder side"
+              "watch watch watch"
+              "ticket ladder ladder"
+              "alerts ladder ladder"
+              "activity ladder ladder"
             `,
           },
         }}
@@ -82,17 +91,6 @@ export function AppShell() {
           <ActivityPanel />
           <StrategyCopilot />
         </Box>
-        <Box
-          sx={{
-            gridArea: 'side',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
-          }}
-        >
-          <PositionsPanel />
-          <BlotterPanel />
-        </Box>
       </Box>
       <Divider sx={{ opacity: 0.08 }} />
       <Box
@@ -111,6 +109,58 @@ export function AppShell() {
       >
         <span>Strategy engine idle · awaiting signal</span>
         <span>Connected to Polymarket Builder Relayer</span>
+      </Box>
+
+      <Dialog
+        open={positionsOpen}
+        onClose={() => setPositionsOpen(false)}
+        fullWidth
+        maxWidth="lg"
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          Positions
+          <IconButton onClick={() => setPositionsOpen(false)} size="small">
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers>
+          <PositionsPanel />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={blotterOpen}
+        onClose={() => setBlotterOpen(false)}
+        fullWidth
+        maxWidth="lg"
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          Live Blotter
+          <IconButton onClick={() => setBlotterOpen(false)} size="small">
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers>
+          <BlotterPanel />
+        </DialogContent>
+      </Dialog>
+
+      <Box
+        sx={{
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1,
+        }}
+      >
+        <Button variant="contained" color="primary" onClick={() => setPositionsOpen(true)}>
+          View PnL Positions
+        </Button>
+        <Button variant="outlined" color="inherit" onClick={() => setBlotterOpen(true)}>
+          Live Order Blotter
+        </Button>
       </Box>
     </Box>
   );

@@ -4,6 +4,7 @@ import { clobClient } from '@/lib/polymarket/clobClient';
 import { logger } from '@/lib/logger';
 import type { ExecutionIntent } from '@/lib/autonomy/types';
 import { clearManagedPosition, recordEntryIntent } from '@/lib/autonomy/managedPositions';
+import { ensureOperatorSafeReady } from '@/lib/services/safeTradingGate';
 
 const tradingEnabled = process.env.AUTONOMY_TRADING_ENABLED === 'true';
 
@@ -17,6 +18,18 @@ export type OrderExecutionResult = {
 export async function executeIntents(intents: ExecutionIntent[]): Promise<OrderExecutionResult[]> {
   if (!intents.length) {
     return [];
+  }
+
+  const safeContext = ensureOperatorSafeReady();
+  if (!safeContext.ready) {
+    logger.warn('strategies.safe.unavailable', {
+      reason: safeContext.reason ?? 'Safe not configured',
+    });
+    return intents.map((intent) => ({
+      intent,
+      status: 'skipped',
+      reason: safeContext.reason ?? 'Operator Safe not ready',
+    }));
   }
 
   if (!tradingEnabled) {

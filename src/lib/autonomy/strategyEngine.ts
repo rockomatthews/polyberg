@@ -3,6 +3,7 @@
 import { CronExpressionParser } from 'cron-parser';
 
 import { logger } from '@/lib/logger';
+import { env } from '@/lib/env';
 import type {
   StrategyDefinition,
   StrategyHandler,
@@ -83,6 +84,18 @@ export async function listStrategies(): Promise<StrategyDefinition[]> {
  * Entry point for the cron route. Evaluates every registered strategy and runs those that are due.
  */
 export async function runScheduledStrategies(now = new Date()): Promise<StrategyRunSummary> {
+  if (env.autonomyDisabled) {
+    return {
+      runAt: now.toISOString(),
+      results: STATIC_STRATEGIES.map((strategy) => ({
+        strategyId: strategy.id,
+        status: 'skipped',
+        reason: 'autonomy disabled',
+        durationMs: 0,
+      })),
+    };
+  }
+
   const results: StrategyRunResult[] = [];
   for (const strategy of STATIC_STRATEGIES) {
     const start = performance.now();

@@ -16,6 +16,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { fetchStrategyOverview, runStrategiesNow } from '@/lib/api/autonomy';
 import type { StrategyDefinition, StrategyRunResult, StrategyRunSummary } from '@/lib/autonomy/types';
+import { useSafeStatus } from '@/hooks/useSafeStatus';
 
 export function StrategyAdminPanel() {
   const [highlight, setHighlight] = React.useState<StrategyRunSummary | null>(null);
@@ -53,9 +54,13 @@ export function StrategyAdminPanel() {
   const strategies = overviewQuery.data?.strategies ?? [];
   const tradingEnabled = overviewQuery.data?.tradingEnabled ?? false;
   const cronConfigured = overviewQuery.data?.cronConfigured ?? false;
+  const autonomyDisabled = overviewQuery.data?.autonomyDisabled ?? false;
+  const { safeStatus } = useSafeStatus();
+  const safeRequired = safeStatus?.requireSafe ?? false;
+  const safeReady = safeStatus?.state === 'ready';
 
   const isLoading = overviewQuery.isLoading;
-  const runDisabled = runMutation.isPending || isLoading;
+  const runDisabled = runMutation.isPending || isLoading || autonomyDisabled;
 
   return (
     <Card variant="outlined">
@@ -84,6 +89,12 @@ export function StrategyAdminPanel() {
             </Button>
           </Stack>
 
+          {autonomyDisabled ? (
+            <Alert severity="error" variant="outlined">
+              Autonomy kill switch engaged (AUTONOMY_DISABLED=true). Clear the flag to resume runs.
+            </Alert>
+          ) : null}
+
           {!tradingEnabled ? (
             <Alert severity="warning" variant="outlined">
               Autonomy orders are currently in simulation mode (set AUTONOMY_TRADING_ENABLED=true to
@@ -92,6 +103,13 @@ export function StrategyAdminPanel() {
           ) : (
             <Chip label="Order execution armed" color="success" size="small" />
           )}
+
+          {safeRequired && !safeReady ? (
+            <Alert severity="warning" variant="outlined">
+              Operator Safe not ready. Strategies will skip until the gasless Safe is deployed and
+              funded.
+            </Alert>
+          ) : null}
 
           {!cronConfigured ? (
             <Alert severity="info" variant="outlined">

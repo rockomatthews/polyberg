@@ -8,55 +8,58 @@ import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Chip from '@mui/material/Chip';
+import Alert from '@mui/material/Alert';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
+import { useSafeStatus } from '@/hooks/useSafeStatus';
+
 type SafeSummaryProps = {
-  safeAddress?: string | null;
   collateralAddress: string;
-  canDeploy: boolean;
 };
 
-export function SafeSummary({ safeAddress, collateralAddress, canDeploy }: SafeSummaryProps) {
+export function SafeSummary({ collateralAddress }: SafeSummaryProps) {
+  const { safeStatus, safeLoading, requestSafe } = useSafeStatus();
+  const safeAddress = safeStatus?.safeAddress ?? null;
   const [balance, setBalance] = React.useState<number | null>(null);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [loadingBalance, setLoadingBalance] = React.useState(false);
+  const [balanceError, setBalanceError] = React.useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = React.useState<Date | null>(null);
 
   React.useEffect(() => {
-    let abort = false;
+    let active = true;
     const loadBalance = async () => {
-      if (!safeAddress) {
-        return;
-      }
+      if (!safeAddress) return;
       try {
-        setLoading(true);
-        setError(null);
+        setLoadingBalance(true);
         const response = await fetch(`/api/profile/safe-balance?safe=${safeAddress}`);
         const json = await response.json();
         if (!response.ok) {
           throw new Error(json.error || 'Unable to fetch Safe balance');
         }
-        if (!abort) {
+        if (active) {
           setBalance(typeof json.balance === 'number' ? json.balance : null);
           setLastUpdated(new Date());
+          setBalanceError(null);
         }
-      } catch (err) {
-        if (!abort) {
-          setError(err instanceof Error ? err.message : 'Safe balance unavailable');
+      } catch (error) {
+        if (active) {
+          setBalanceError(error instanceof Error ? error.message : 'Safe balance unavailable');
         }
       } finally {
-        if (!abort) {
-          setLoading(false);
+        if (active) {
+          setLoadingBalance(false);
         }
       }
     };
 
-    void loadBalance();
+    if (safeStatus?.state === 'ready') {
+      void loadBalance();
+    }
 
     return () => {
-      abort = true;
+      active = false;
     };
-  }, [safeAddress]);
+  }, [safeAddress, safeStatus?.state]);
 
   const copySafe = React.useCallback(() => {
     if (safeAddress) {
@@ -64,7 +67,33 @@ export function SafeSummary({ safeAddress, collateralAddress, canDeploy }: SafeS
     }
   }, [safeAddress]);
 
-  if (!safeAddress) {
+  if (safeLoading) {
+    return (
+      <Stack direction="row" spacing={1} alignItems="center" mt={2}>
+        <CircularProgress size={14} />
+        <Typography variant="body2" color="text.secondary">
+          Checking Safe status…
+        </Typography>
+      </Stack>
+    );
+  }
+
+  if (!safeStatus || safeStatus.state === 'disabled') {
+    return (
+      <Stack spacing={1.5} mt={2}>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Typography variant="subtitle2">Safe</Typography>
+          <Chip label="Relayer offline" color="warning" size="small" variant="outlined" />
+        </Stack>
+        <Typography variant="body2" color="text.secondary">
+          Configure the Polymarket relayer to unlock gasless sniping. Once online, you can deploy per
+          user Safes directly from here.
+        </Typography>
+      </Stack>
+    );
+  }
+
+  if (safeStatus.state === 'missing') {
     return (
       <Stack spacing={1.5} mt={2}>
         <Stack direction="row" spacing={1} alignItems="center">
@@ -72,17 +101,53 @@ export function SafeSummary({ safeAddress, collateralAddress, canDeploy }: SafeS
           <Chip label="Not connected" color="warning" size="small" variant="outlined" />
         </Stack>
         <Typography variant="body2" color="text.secondary">
-          No Safe is connected to this profile yet. Head to the Builder Onboarding Wizard to deploy a
-          Safe (fund it with Polygon USDC at {collateralAddress}) so trades can settle safely.
+          Deploy a dedicated Safe wallet to route all trades gaslessly. Funds live inside Polygon
+          Safe accounts and the relayer signs for you.
         </Typography>
         <Button
-          component="a"
-          href="#builder-credentials"
-          variant="outlined"
+          variant="contained"
           size="small"
-          disabled={!canDeploy}
+          onClick={() => requestSafe.mutate()}
+          disabled={requestSafe.isPending}
         >
-          {canDeploy ? 'Connect Safe' : 'Relayer required'}
+          {requestSafe.isPending ? 'Requesting…' : 'Request gasless Safe'}
+        </Button>
+        {requestSafe.isError ? (
+          <Alert severity="error" variant="outlined">
+            {requestSafe.error instanceof Error ? requestSafe.error.message : 'Safe request failed'}
+          </Alert>
+        ) : null}
+      </Stack>
+    );
+  }
+
+  if (safeStatus.state === 'pending') {
+    return (
+      <Stack spacing={1.5} mt={2}>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Typography variant="subtitle2">Safe</Typography>
+          <Chip label="Deploying" color="info" size="small" variant="outlined" />
+        </Stack>
+        <Typography variant="body2" color="text.secondary">
+          Safe deployment in progress ({safeStatus.statusLabel}). The relayer handles gas and should
+          finish within ~30 seconds.
+        </Typography>
+      </Stack>
+    );
+  }
+
+  if (safeStatus.state === 'error') {
+    return (
+      <Stack spacing={1.5} mt={2}>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Typography variant="subtitle2">Safe</Typography>
+          <Chip label="Error" color="error" size="small" variant="outlined" />
+        </Stack>
+        <Alert severity="error" variant="outlined">
+          {safeStatus.statusLabel || 'Safe deployment failed. Retry the request or contact support.'}
+        </Alert>
+        <Button variant="outlined" size="small" onClick={() => requestSafe.mutate()}>
+          Retry deployment
         </Button>
       </Stack>
     );
@@ -90,7 +155,10 @@ export function SafeSummary({ safeAddress, collateralAddress, canDeploy }: SafeS
 
   return (
     <Stack spacing={1.5} mt={2}>
-      <Typography variant="subtitle2">Safe</Typography>
+      <Stack direction="row" spacing={1} alignItems="center">
+        <Typography variant="subtitle2">Safe</Typography>
+        <Chip label="Ready" color="success" size="small" variant="outlined" />
+      </Stack>
       <Stack direction="row" spacing={1} alignItems="center">
         <Typography component="span" fontFamily="monospace" sx={{ wordBreak: 'break-all' }}>
           {safeAddress}
@@ -105,7 +173,7 @@ export function SafeSummary({ safeAddress, collateralAddress, canDeploy }: SafeS
         <Typography variant="body2" color="text.secondary">
           Balance
         </Typography>
-        {loading ? (
+        {loadingBalance ? (
           <CircularProgress size={14} />
         ) : (
           <Typography fontWeight={600}>
@@ -118,14 +186,14 @@ export function SafeSummary({ safeAddress, collateralAddress, canDeploy }: SafeS
           </Typography>
         ) : null}
       </Stack>
-      {error ? (
+      {balanceError ? (
         <Typography variant="caption" color="error.main">
-          {error}
+          {balanceError}
         </Typography>
       ) : null}
       <Typography variant="body2" color="text.secondary">
-        Fund this Safe via Polygon USDC ({collateralAddress}) and it will auto-feed the relayer for
-        gasless snipes.
+        Fund this Safe via Polygon USDC ({collateralAddress}) and the relayer will execute snipes
+        gaslessly on your behalf.
       </Typography>
     </Stack>
   );

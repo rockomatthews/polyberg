@@ -15,6 +15,7 @@ import { useMutation } from '@tanstack/react-query';
 import { PanelCard } from './PanelCard';
 import { useMarketsData, useOrderBookData } from '@/hooks/useTerminalData';
 import { useTerminalStore } from '@/state/useTerminalStore';
+import { useSafeStatus } from '@/hooks/useSafeStatus';
 
 const deriveMidPrice = (bid: number | null, ask: number | null) => {
   if (bid != null && ask != null) return (bid + ask) / 2;
@@ -30,6 +31,7 @@ export function TradeTicketPanel() {
   const executionMode = useTerminalStore((state) => state.executionMode);
   const setExecutionMode = useTerminalStore((state) => state.setExecutionMode);
   const { data: orderBook } = useOrderBookData(selectedTokenId);
+  const { safeStatus } = useSafeStatus();
 
   const activeMarket = markets?.find((market) => market.conditionId === selectedMarketId);
 
@@ -124,7 +126,9 @@ export function TradeTicketPanel() {
 
   const priceSliderMin = Math.max(0, derivedMid - 20);
   const priceSliderMax = derivedMid + 20;
-  const submitDisabled = !selectedTokenId || placeOrder.isPending;
+  const safeRequired = safeStatus?.requireSafe ?? false;
+  const safeReady = safeStatus?.state === 'ready' || !safeRequired;
+  const submitDisabled = !selectedTokenId || placeOrder.isPending || !safeReady;
 
   return (
     <PanelCard
@@ -132,6 +136,12 @@ export function TradeTicketPanel() {
       subtitle={activeMarket.primaryOutcome ?? activeMarket.question}
     >
       <Stack spacing={2}>
+        {safeRequired && !safeReady ? (
+          <Alert severity="warning" variant="outlined">
+            Gasless trading requires an active Safe. Head to your profile to deploy one, then return
+            to arm the sniper.
+          </Alert>
+        ) : null}
         <ButtonGroup fullWidth size="small" variant="outlined">
           {(['BUY', 'SELL'] as const).map((option) => (
             <Button

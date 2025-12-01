@@ -7,6 +7,10 @@ import { authOptions } from '@/lib/auth';
 import { ensureTradingClient } from '@/lib/polymarket/tradingClient';
 import { recordTradeInsight } from '@/lib/services/tradeInsightsService';
 import { logger } from '@/lib/logger';
+import {
+  ensureUserSafeReady,
+  SafeNotReadyError,
+} from '@/lib/services/safeTradingGate';
 
 const tradeSchema = z.object({
   tokenId: z.string().min(1),
@@ -76,6 +80,21 @@ export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+
+  try {
+    await ensureUserSafeReady(session.user.id);
+  } catch (error) {
+    if (error instanceof SafeNotReadyError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          safe: error.payload,
+        },
+        { status: 409 },
+      );
+    }
+    throw error;
   }
 
   const ensured = await ensureTradingClient(session.user.id);

@@ -21,6 +21,7 @@ export type StrategyOverviewResponse = {
   runs: StrategyRunSummary[];
   tradingEnabled: boolean;
   cronConfigured: boolean;
+  autonomyDisabled: boolean;
 };
 
 export async function fetchStrategyOverview(): Promise<StrategyOverviewResponse> {

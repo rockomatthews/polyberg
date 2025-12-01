@@ -20,6 +20,8 @@ const envSchema = z.object({
   POLYMARKET_RELAYER_PRIVATE_KEY: z.string().optional(),
   POLYMARKET_ORDER_SIGNER_PRIVATE_KEY: z.string().optional(),
   POLYMARKET_COLLATERAL_ADDRESS: z.string().optional(),
+  POLYMARKET_REQUIRE_SAFE: z.coerce.boolean().optional(),
+  AUTONOMY_DISABLED: z.coerce.boolean().optional(),
   PINECONE_API_KEY: z.string().optional(),
   PINECONE_INDEX: z.string().optional(),
   PINECONE_NAMESPACE: z.string().optional(),
@@ -74,6 +76,8 @@ export const env = {
   orderSignerPrivateKey:
     data.POLYMARKET_ORDER_SIGNER_PRIVATE_KEY ?? data.POLYMARKET_RELAYER_PRIVATE_KEY,
   collateralAddress: data.POLYMARKET_COLLATERAL_ADDRESS ?? '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
+  requireSafe: data.POLYMARKET_REQUIRE_SAFE ?? true,
+  autonomyDisabled: data.AUTONOMY_DISABLED ?? false,
   pinecone:
     data.PINECONE_API_KEY && data.PINECONE_INDEX
       ? {
@@ -92,4 +96,5 @@ export const hasRelayer = Boolean(env.relayerUrl);
 export const hasOrderSigner = Boolean(env.orderSignerPrivateKey);
 export const hasCollateralAddress = Boolean(env.collateralAddress);
 export const hasPinecone = Boolean(env.pinecone?.apiKey && env.pinecone.index);
+export const requiresSafe = Boolean(env.requireSafe);
 

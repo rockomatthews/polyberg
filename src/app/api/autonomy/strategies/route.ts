@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { listStrategies, runScheduledStrategies } from '@/lib/autonomy/strategyEngine';
 import { fetchRecentStrategyRuns, recordStrategyRun } from '@/lib/autonomy/runLog';
+import { env } from '@/lib/env';
 
 async function ensureSession() {
   const session = await getServerSession(authOptions);
@@ -28,6 +29,7 @@ export async function GET() {
     runs,
     tradingEnabled,
     cronConfigured,
+    autonomyDisabled: env.autonomyDisabled,
   });
 }
 

@@ -17,18 +17,10 @@ import {
   ensureUserRecord,
   getUserRecord,
   getUserSafe,
-  upsertUserSafe,
   type UserRecord,
   type UserSafeRecord,
 } from '@/lib/services/userService';
-import {
-  env,
-  hasBuilderSigning,
-  hasL2Auth,
-  hasOrderSigner,
-  hasRelayer,
-} from '@/lib/env';
-import { ensureRelayClient, hasRelayClient } from '@/lib/relayer/relayClient';
+import { env, hasBuilderSigning, hasL2Auth, hasOrderSigner, hasRelayer } from '@/lib/env';
 import { SignOutButton } from '@/components/auth/SignOutButton';
 import {
   listCopilotEntries,
@@ -96,36 +88,6 @@ async function loadUser(): Promise<{
     });
   }
 
-  if (!safeRecord && hasRelayer && hasRelayClient) {
-    try {
-      const client = ensureRelayClient('auto deploy user Safe');
-      const response = await client.deploy();
-      const result = await response.wait();
-      const safeAddress = result?.proxyAddress ?? result?.proxyAddress?.toString();
-      if (safeAddress) {
-        await upsertUserSafe(session.user.id, {
-          safeAddress,
-          deploymentTxHash: result?.transactionHash ?? null,
-          status: 'deployed',
-          ownershipType: 'per-user',
-          metadata: {
-            taskId:
-              typeof result === 'object' && result && 'taskId' in result
-                ? ((result as { taskId?: string }).taskId ?? null)
-                : null,
-            relayerUrl: env.relayerUrl ?? null,
-            autoDeployedAt: new Date().toISOString(),
-          },
-        });
-        safeRecord = await getUserSafe(session.user.id);
-      }
-    } catch (error) {
-      logger.warn('profile.autoSafe.failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
   try {
     history = await listCopilotEntries(session.user.id, 5);
   } catch (error) {
@@ -186,11 +148,7 @@ export default async function ProfilePage() {
                 </Link>
               </Stack>
             </Stack>
-            <SafeSummary
-              safeAddress={sessionSafe?.safe_address ?? null}
-              collateralAddress={env.collateralAddress}
-              canDeploy={hasRelayer}
-            />
+            <SafeSummary collateralAddress={env.collateralAddress} />
           </CardContent>
         </Card>
 

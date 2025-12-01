@@ -14,16 +14,18 @@ import { TerminalHeader } from './TerminalHeader';
 import { HealthHeroBanner } from './HealthHeroBanner';
 import { WatchlistPanel } from '../panels/WatchlistPanel';
 import { DepthLadderPanel } from '../panels/DepthLadderPanel';
-import { TradeTicketPanel } from '../panels/TradeTicketPanel';
 import { PositionsPanel } from '../panels/PositionsPanel';
 import { BlotterPanel } from '../panels/BlotterPanel';
 import { AlertsPanel } from '../panels/AlertsPanel';
 import { ActivityPanel } from '../panels/ActivityPanel';
 import { StrategyCopilot } from '../panels/StrategyCopilot';
+import { useTerminalStore } from '@/state/useTerminalStore';
 
 export function AppShell() {
   const [positionsOpen, setPositionsOpen] = React.useState(false);
   const [blotterOpen, setBlotterOpen] = React.useState(false);
+  const depthOverlayOpen = useTerminalStore((state) => state.depthOverlayOpen);
+  const setDepthOverlayOpen = useTerminalStore((state) => state.setDepthOverlayOpen);
 
   return (
     <Box
@@ -50,27 +52,21 @@ export function AppShell() {
           gridTemplateColumns: {
             xs: '1fr',
             md: 'minmax(0, 1fr) minmax(0, 1fr)',
-            lg: 'minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr)',
+            lg: 'minmax(0, 1.8fr) minmax(0, 1fr)',
           },
           gridTemplateAreas: {
             xs: `
               "watch"
-              "ticket"
               "alerts"
-              "ladder"
               "activity"
             `,
             md: `
               "watch watch"
-              "ticket ladder"
-              "alerts ladder"
-              "activity ladder"
+              "alerts activity"
             `,
             lg: `
-              "watch watch watch"
-              "ticket ladder ladder"
-              "alerts ladder ladder"
-              "activity ladder ladder"
+              "watch watch"
+              "alerts activity"
             `,
           },
         }}
@@ -80,12 +76,6 @@ export function AppShell() {
         </Box>
         <Box sx={{ gridArea: 'alerts' }}>
           <AlertsPanel />
-        </Box>
-        <Box sx={{ gridArea: 'ladder' }}>
-          <DepthLadderPanel />
-        </Box>
-        <Box sx={{ gridArea: 'ticket' }}>
-          <TradeTicketPanel />
         </Box>
         <Box sx={{ gridArea: 'activity', display: 'flex', flexDirection: 'column', gap: 2 }}>
           <ActivityPanel />
@@ -142,6 +132,30 @@ export function AppShell() {
         </DialogTitle>
         <DialogContent dividers>
           <BlotterPanel />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={depthOverlayOpen}
+        onClose={() => setDepthOverlayOpen(false)}
+        fullWidth
+        maxWidth="lg"
+        PaperProps={{
+          sx: {
+            backgroundColor: 'rgba(12, 14, 24, 0.92)',
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'text.primary' }}
+        >
+          Depth Ladder
+          <IconButton onClick={() => setDepthOverlayOpen(false)} size="small">
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers sx={{ bgcolor: 'transparent' }}>
+          <DepthLadderPanel />
         </DialogContent>
       </Dialog>
 

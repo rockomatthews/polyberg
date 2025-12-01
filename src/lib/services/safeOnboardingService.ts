@@ -1,12 +1,16 @@
 import { redisClient } from '@/lib/redis';
 import { env, hasRelayer, requiresSafe } from '@/lib/env';
-import { ensureRelayClient, hasRelayClient } from '@/lib/relayer/relayClient';
+import {
+  ensureRelayClient,
+  hasRelayClient,
+  deriveOperatorSafeAddress,
+} from '@/lib/relayer/relayClient';
 import { getUserSafe, upsertUserSafe, type UserSafeRecord } from '@/lib/services/userService';
 import { logger } from '@/lib/logger';
 import { hasDatabase } from '@/lib/db';
 
 const CACHE_TTL_SECONDS = 30;
-const fallbackSafes = new Map<string, UserSafeRecord>();
+const SAFE_REGISTRY_KEY = 'safe:records';
 
 export type SafeStatusState = 'disabled' | 'missing' | 'pending' | 'ready' | 'error';
 
@@ -67,8 +71,18 @@ export async function requestSafeDeployment(userId: string): Promise<SafeStatusP
 
   const client = ensureRelayClient('deploy Safe');
   logger.info('safe.request.start', { userId });
-  const response = await client.deploy();
-  const relayerTx = await response.wait();
+  let relayerTx;
+  try {
+    const response = await client.deploy();
+    relayerTx = await response.wait();
+  } catch (error) {
+    const recovered = await recoverExistingSafe(userId, error);
+    if (recovered) {
+      await writeCache(userId, recovered);
+      return recovered;
+    }
+    throw error;
+  }
   if (!relayerTx?.proxyAddress) {
     logger.error('safe.request.missingAddress', {
       userId,
@@ -176,7 +190,20 @@ async function readSafeRecord(userId: string) {
   if (hasDatabase) {
     return getUserSafe(userId);
   }
-  return fallbackSafes.get(userId) ?? null;
+  if (redisClient) {
+    try {
+      const raw = await redisClient.hget<string>(SAFE_REGISTRY_KEY, userId);
+      if (raw) {
+        return JSON.parse(raw) as UserSafeRecord;
+      }
+    } catch (error) {
+      logger.warn('safe.registry.readFailed', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return null;
 }
 
 async function storeSafeRecord(
@@ -201,8 +228,42 @@ async function storeSafeRecord(
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
-  fallbackSafes.set(userId, record);
+  if (redisClient) {
+    try {
+      await redisClient.hset(SAFE_REGISTRY_KEY, { [userId]: JSON.stringify(record) });
+    } catch (error) {
+      logger.warn('safe.registry.writeFailed', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
   return record;
+}
+
+async function recoverExistingSafe(userId: string, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!message || !/safe already deployed/i.test(message)) {
+    return null;
+  }
+  const fallbackAddress = deriveOperatorSafeAddress();
+  if (!fallbackAddress) {
+    return null;
+  }
+  logger.warn('safe.request.alreadyDeployed', {
+    userId,
+    safe: fallbackAddress,
+  });
+  const existing = await storeSafeRecord(userId, {
+    safeAddress: fallbackAddress,
+    status: 'ready',
+    ownershipType: 'builder',
+    metadata: {
+      source: 'relayer-existing',
+      relayerUrl: env.relayerUrl ?? null,
+    },
+  });
+  return existing ? mapRecordToStatus(existing) : buildMissingStatus();
 }
 
 

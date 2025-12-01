@@ -2,6 +2,8 @@ import { JsonRpcProvider } from '@ethersproject/providers';
 import { Wallet } from '@ethersproject/wallet';
 import { RelayClient } from '@polymarket/builder-relayer-client';
 import { BuilderConfig } from '@polymarket/builder-signing-sdk';
+import { deriveSafe } from '@polymarket/builder-relayer-client/dist/builder';
+import { getContractConfig } from '@polymarket/builder-relayer-client/dist/config';
 
 import { env } from '@/lib/env';
 
@@ -32,6 +34,10 @@ export const relayClient = env.relayerUrl
 
 export const hasRelayClient = Boolean(relayClient);
 export const hasRelaySigner = Boolean(relaySigner);
+const contractConfig =
+  env.relayerChainId || env.polymarketChainId
+    ? getContractConfig(env.relayerChainId ?? env.polymarketChainId)
+    : undefined;
 
 export function ensureRelayClient(action = 'relayer operation'): RelayClient {
   if (!relayClient) {
@@ -41,5 +47,16 @@ export function ensureRelayClient(action = 'relayer operation'): RelayClient {
     throw new Error(`Relayer signer (RPC URL + private key) missing. Cannot perform ${action}.`);
   }
   return relayClient;
+}
+
+export function deriveOperatorSafeAddress() {
+  if (!relaySigner || !contractConfig) {
+    return null;
+  }
+  try {
+    return deriveSafe(relaySigner.address, contractConfig.SafeContracts.SafeFactory);
+  } catch {
+    return null;
+  }
 }
 

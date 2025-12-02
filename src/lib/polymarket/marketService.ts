@@ -544,10 +544,11 @@ function normalizeGammaTokens(market: GammaMarket): ClobToken[] {
       }));
   }
 
-  const clobTokenIds =
-    parseJsonArray<string>(market.clobTokenIds) ??
-    parseJsonArray<string>((market as { clob_token_ids?: string }).clob_token_ids) ??
-    [];
+  const clobTokenIds = Array.isArray(market.clobTokenIds)
+    ? market.clobTokenIds
+    : parseJsonArray<string>(market.clobTokenIds ?? null) ??
+      parseJsonArray<string>((market as { clob_token_ids?: string }).clob_token_ids ?? null) ??
+      [];
   const outcomeLabels =
     parseOutcomeLabels(market.outcomes) ??
     parseOutcomeLabels((market as { shortOutcomes?: string }).shortOutcomes) ??

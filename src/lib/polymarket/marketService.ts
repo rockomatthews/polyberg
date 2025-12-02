@@ -462,7 +462,12 @@ async function fetchGammaSportsMarkets(
     const markets = Array.isArray(payload) ? payload : payload.data ?? [];
     const normalized: ClobMarket[] = [];
     for (const market of markets) {
-      const conditionId = market.conditionId ?? '';
+      const conditionId =
+        market.conditionId ??
+        (market as { condition_id?: string }).condition_id ??
+        (market as { id?: string }).id ??
+        market.slug ??
+        '';
       if (!conditionId || existingIds.has(conditionId)) {
         continue;
       }

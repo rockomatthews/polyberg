@@ -57,7 +57,7 @@ export async function searchMarkets(query: string): Promise<Market[]> {
   }
   try {
     const data = await apiGet<{ markets: Market[] }>(
-      `/api/polymarket/markets?q=${encodeURIComponent(trimmed)}&limit=15`,
+      `/api/polymarket/search?q=${encodeURIComponent(trimmed)}&limit=20`,
     );
     return data.markets;
   } catch (error) {

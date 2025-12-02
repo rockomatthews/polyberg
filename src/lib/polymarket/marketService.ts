@@ -467,11 +467,11 @@ async function fetchGammaSportsMarkets(
         continue;
       }
       const tokens = market.tokens ?? market.outcomes ?? [];
-      const parsedTokens = tokens
+      const parsedTokens: ClobToken[] = tokens
         .filter((token) => token.tokenId || token.id)
         .map((token) => ({
-          token_id: token.tokenId ?? token.id ?? null,
-          outcome: token.outcome ?? null,
+          token_id: token.tokenId ?? token.id ?? undefined,
+          outcome: token.outcome ?? undefined,
           price:
             token.priceCents != null
               ? Number(token.priceCents) / 100
@@ -479,7 +479,7 @@ async function fetchGammaSportsMarkets(
               ? typeof token.price === 'string'
                 ? Number(token.price)
                 : token.price
-              : null,
+              : undefined,
         }));
 
       normalized.push({

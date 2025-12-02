@@ -190,8 +190,8 @@ export function SafeSummary({ collateralAddress }: SafeSummaryProps) {
         </Typography>
       ) : null}
       <Typography variant="body2" color="text.secondary">
-        Fund this Safe via Polygon USDC ({collateralAddress}) and the relayer will execute snipes
-        gaslessly on your behalf.
+        Fund the above Safe address to start trading. Send USDC over Polygon and the relayer will
+        execute gasless snipes for you.
       </Typography>
     </Stack>
   );

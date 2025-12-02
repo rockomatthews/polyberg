@@ -142,68 +142,83 @@ export function TradeTicketPanel() {
             to arm the sniper.
           </Alert>
         ) : null}
-        <ButtonGroup fullWidth size="small" variant="outlined">
-          {(['BUY', 'SELL'] as const).map((option) => (
-            <Button
-              key={option}
-              color={option === 'BUY' ? 'success' : 'error'}
-              variant={side === option ? 'contained' : 'outlined'}
-              onClick={() => setSide(option)}
-            >
-              {option}
-            </Button>
-          ))}
-        </ButtonGroup>
-        <ButtonGroup fullWidth size="small" variant="outlined">
-          <Button
-            variant={executionMode === 'aggressive' ? 'contained' : 'outlined'}
-            onClick={() => setExecutionMode('aggressive')}
+        <Stack
+          direction={{ xs: 'column', lg: 'row' }}
+          spacing={2}
+          alignItems="stretch"
+          sx={{ width: '100%' }}
+        >
+          <Stack
+            spacing={1.5}
+            flex={{ xs: '1 1 auto', lg: '0 0 240px' }}
+            minWidth={0}
           >
-            Aggressive
-          </Button>
-          <Button
-            variant={executionMode === 'passive' ? 'contained' : 'outlined'}
-            onClick={() => setExecutionMode('passive')}
-          >
-            Passive
-          </Button>
-        </ButtonGroup>
-        <Stack spacing={1}>
-          <Typography variant="caption" color="text.secondary">
-            Limit Price ({price.toFixed(2)}¢)
-          </Typography>
-          <Slider
-            value={price}
-            min={priceSliderMin}
-            max={priceSliderMax}
-            onChange={(_, value) => setPrice(value as number)}
-            size="small"
-          />
-        </Stack>
-        <Stack spacing={1}>
-          <Typography variant="caption" color="text.secondary">
-            Size ({size.toFixed(2)}k)
-          </Typography>
-          <Slider
-            value={size}
-            min={1}
-            max={20}
-            onChange={(_, value) => setSize(value as number)}
-            size="small"
-          />
-          <Stack direction="row" spacing={1}>
-            {[2, 5, 10].map((preset) => (
-              <Chip
-                key={preset}
-                label={`${preset}k`}
-                onClick={() => setSize(preset)}
-                variant={size === preset ? 'filled' : 'outlined'}
-                color={size === preset ? 'primary' : 'default'}
+            <ButtonGroup fullWidth size="small" variant="outlined">
+              {(['BUY', 'SELL'] as const).map((option) => (
+                <Button
+                  key={option}
+                  color={option === 'BUY' ? 'success' : 'error'}
+                  variant={side === option ? 'contained' : 'outlined'}
+                  onClick={() => setSide(option)}
+                >
+                  {option}
+                </Button>
+              ))}
+            </ButtonGroup>
+            <ButtonGroup fullWidth size="small" variant="outlined">
+              <Button
+                variant={executionMode === 'aggressive' ? 'contained' : 'outlined'}
+                onClick={() => setExecutionMode('aggressive')}
+              >
+                Aggressive
+              </Button>
+              <Button
+                variant={executionMode === 'passive' ? 'contained' : 'outlined'}
+                onClick={() => setExecutionMode('passive')}
+              >
+                Passive
+              </Button>
+            </ButtonGroup>
+          </Stack>
+          <Stack spacing={2} flex={1} minWidth={0}>
+            <Stack spacing={1}>
+              <Typography variant="caption" color="text.secondary">
+                Limit Price ({price.toFixed(2)}¢)
+              </Typography>
+              <Slider
+                value={price}
+                min={priceSliderMin}
+                max={priceSliderMax}
+                onChange={(_, value) => setPrice(value as number)}
+                size="small"
               />
-            ))}
+            </Stack>
+            <Stack spacing={1}>
+              <Typography variant="caption" color="text.secondary">
+                Size ({size.toFixed(2)}k)
+              </Typography>
+              <Slider
+                value={size}
+                min={1}
+                max={20}
+                onChange={(_, value) => setSize(value as number)}
+                size="small"
+              />
+              <Stack direction="row" spacing={1}>
+                {[2, 5, 10].map((preset) => (
+                  <Chip
+                    key={preset}
+                    label={`${preset}k`}
+                    onClick={() => setSize(preset)}
+                    variant={size === preset ? 'filled' : 'outlined'}
+                    color={size === preset ? 'primary' : 'default'}
+                  />
+                ))}
+              </Stack>
+            </Stack>
           </Stack>
         </Stack>
-        <Stack direction="row" spacing={1}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
           <TextField
             label="Slippage (¢)"
             variant="filled"
@@ -237,6 +252,7 @@ export function TradeTicketPanel() {
           size="large"
           onClick={handleSubmit}
           disabled={submitDisabled}
+          sx={{ alignSelf: 'flex-start' }}
         >
           {placeOrder.isPending ? (
             <Stack direction="row" spacing={1} alignItems="center">

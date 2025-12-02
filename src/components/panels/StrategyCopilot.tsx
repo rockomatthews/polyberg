@@ -72,6 +72,7 @@ export function StrategyCopilot() {
         marketId: match.conditionId,
         tokenId: match.primaryTokenId,
         question: match.question,
+        openDepthOverlay: true,
       });
     }
   };

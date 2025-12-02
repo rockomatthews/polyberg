@@ -61,6 +61,7 @@ export function WatchlistPanel() {
         marketId: defaultMarket.conditionId,
         tokenId: defaultMarket.primaryTokenId,
         question: defaultMarket.question,
+        openDepthOverlay: false,
       });
     }
   }, [selectedMarketId, defaultMarket, setSelection]);
@@ -145,6 +146,7 @@ export function WatchlistPanel() {
                       marketId: market.conditionId,
                       tokenId: market.primaryTokenId,
                       question: market.question,
+                      openDepthOverlay: true,
                     })
                   }
                   sx={{

@@ -18,7 +18,6 @@ import {
   getUserRecord,
   type UserRecord,
 } from '@/lib/services/userService';
-import { env } from '@/lib/env';
 import { SignOutButton } from '@/components/auth/SignOutButton';
 import {
   listCopilotEntries,
@@ -105,7 +104,7 @@ export default async function ProfilePage() {
                 </Link>
               </Stack>
             </Stack>
-            <SafeSummary collateralAddress={env.collateralAddress} />
+            <SafeSummary />
           </CardContent>
         </Card>
 

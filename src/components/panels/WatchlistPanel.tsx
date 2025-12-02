@@ -41,6 +41,15 @@ const formatLiquidity = (value: number | null) => {
   return value.toFixed(0);
 };
 
+const CATEGORY_FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'sports', label: 'Sports' },
+  { id: 'entertainment', label: 'Entertainment' },
+  { id: 'crypto', label: 'Crypto' },
+  { id: 'politics', label: 'Politics' },
+  { id: 'macro', label: 'Macro' },
+] as const;
+
 export function WatchlistPanel() {
   const { data, isFetching } = useMarketsData();
   const markets = React.useMemo(() => data ?? [], [data]);
@@ -48,6 +57,8 @@ export function WatchlistPanel() {
   const setSelection = useTerminalStore((state) => state.setSelection);
   const { watchlist, toggleWatchlist, isError } = useUserWatchlist();
   const [favoritesOnly, setFavoritesOnly] = React.useState(false);
+  const [categoryFilter, setCategoryFilter] =
+    React.useState<(typeof CATEGORY_FILTERS)[number]['id']>('all');
 
   const defaultMarket = React.useMemo(
     () => markets.find((market) => market.primaryTokenId),
@@ -78,15 +89,21 @@ export function WatchlistPanel() {
     return pickFeaturedMarkets(markets, 12);
   }, [markets, watchlist]);
 
-  const gridMarkets = React.useMemo(() => {
+  const filteredMarkets = React.useMemo(() => {
+    const applyCategory = (list: Market[]) => {
+      if (categoryFilter === 'all') {
+        return list;
+      }
+      return list.filter((market) => deriveCategory(market) === categoryFilter);
+    };
     if (favoritesOnly) {
-      return sortedMarkets.filter((market) => watchlist.includes(market.conditionId));
+      return applyCategory(sortedMarkets.filter((market) => watchlist.includes(market.conditionId)));
     }
     if (sortedMarkets.length) {
-      return sortedMarkets;
+      return applyCategory(sortedMarkets);
     }
-    return autoMarkets;
-  }, [favoritesOnly, sortedMarkets, watchlist, autoMarkets]);
+    return applyCategory(autoMarkets);
+  }, [favoritesOnly, sortedMarkets, watchlist, autoMarkets, categoryFilter]);
 
   return (
     <PanelCard title="Watchlist" subtitle="Markets">
@@ -108,6 +125,18 @@ export function WatchlistPanel() {
             Unable to load your watchlist. Refresh or check your session.
           </Alert>
         ) : null}
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          {CATEGORY_FILTERS.map((filter) => (
+            <Chip
+              key={filter.id}
+              size="small"
+              label={filter.label}
+              variant={categoryFilter === filter.id ? 'filled' : 'outlined'}
+              color={categoryFilter === filter.id ? 'primary' : 'default'}
+              onClick={() => setCategoryFilter(filter.id)}
+            />
+          ))}
+        </Stack>
         {autoMarkets.length > 0 && !watchlist.length ? (
           <Alert severity="info" variant="outlined">
             Showing a rotating mix of trending Polymarket markets. Star any card to pin it to your
@@ -129,7 +158,7 @@ export function WatchlistPanel() {
               },
             }}
           >
-            {gridMarkets.map((market) => {
+            {filteredMarkets.map((market) => {
               const isActive = market.conditionId === selectedMarketId;
               const spreadLabel =
                 market.spread != null ? `${market.spread.toFixed(2)}¢` : '––';
@@ -204,7 +233,7 @@ export function WatchlistPanel() {
             })}
           </Box>
         )}
-        {favoritesOnly && gridMarkets.length === 0 ? (
+        {favoritesOnly && filteredMarkets.length === 0 ? (
           <Typography variant="caption" color="text.secondary">
             No starred markets yet. Click the star icon to pin favorites.
           </Typography>
@@ -263,4 +292,41 @@ function shuffle<T>(input: T[]): T[] {
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;
+}
+
+function deriveCategory(market: Market) {
+  const tag = market.tag?.toLowerCase() ?? '';
+  const question = market.question.toLowerCase();
+  const matches = (keywords: string[]) => keywords.some((word) => question.includes(word));
+  if (
+    ['sports', 'nfl', 'nba', 'ufc', 'mlb', 'nhl'].includes(tag) ||
+    matches(['match', 'game', 'odds', 'tournament', 'world cup', 'nfl', 'nba', 'mlb', 'nhl'])
+  ) {
+    return 'sports';
+  }
+  if (
+    ['movies', 'music', 'awards', 'culture'].includes(tag) ||
+    matches(['oscar', 'grammy', 'album', 'movie', 'film', 'celebrity', 'tour'])
+  ) {
+    return 'entertainment';
+  }
+  if (
+    ['crypto', 'tech', 'ai', 'business'].includes(tag) ||
+    matches(['bitcoin', 'ethereum', 'coin', 'token', 'stock', 'ipo', 'ai'])
+  ) {
+    return 'crypto';
+  }
+  if (
+    ['politics', 'elections', 'senate', 'trump'].includes(tag) ||
+    matches(['election', 'president', 'congress', 'governor', 'parliament'])
+  ) {
+    return 'politics';
+  }
+  if (
+    ['economy', 'science', 'world'].includes(tag) ||
+    matches(['inflation', 'economy', 'gdp', 'climate', 'war', 'disease', 'hurricane'])
+  ) {
+    return 'macro';
+  }
+  return 'other';
 }

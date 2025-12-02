@@ -13,11 +13,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
 import { useSafeStatus } from '@/hooks/useSafeStatus';
 
-type SafeSummaryProps = {
-  collateralAddress: string;
-};
-
-export function SafeSummary({ collateralAddress }: SafeSummaryProps) {
+export function SafeSummary() {
   const { safeStatus, safeLoading, requestSafe } = useSafeStatus();
   const safeAddress = safeStatus?.safeAddress ?? null;
   const [balance, setBalance] = React.useState<number | null>(null);

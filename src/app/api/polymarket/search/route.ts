@@ -45,9 +45,9 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(Math.max(limitParam, 1), 50);
 
   try {
-    const url = new URL('/search', env.gammaApiHost);
+    const url = new URL('/public-search', env.gammaApiHost);
     url.searchParams.set('q', query);
-    url.searchParams.set('limit', String(limit * 2));
+    url.searchParams.set('limit_per_type', String(limit * 2));
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'polyberg-search/1.0',
@@ -66,12 +66,13 @@ export async function GET(request: NextRequest) {
     if (!response.ok) {
       throw new Error(`Gamma search failed with ${response.status}`);
     }
-    const payload = (await response.json()) as
-      | { markets?: GammaSearchMarket[]; data?: GammaSearchMarket[] }
-      | GammaSearchMarket[];
-    const markets = Array.isArray(payload)
-      ? payload
-      : payload.markets ?? payload.data ?? [];
+    const payload = (await response.json()) as {
+      events?: Array<{ markets?: GammaSearchMarket[] }>;
+    };
+    const markets =
+      payload.events
+        ?.flatMap((event) => event.markets ?? [])
+        .filter(Boolean) ?? [];
     const normalized = markets
       .map(normalizeGammaMarket)
       .filter((market): market is Market => Boolean(market));

@@ -37,6 +37,7 @@ export function TradeTicketPanel() {
   const { data: markets } = useMarketsData();
   const selectedMarketId = useTerminalStore((state) => state.selectedMarketId);
   const selectedTokenId = useTerminalStore((state) => state.selectedTokenId);
+  const selectedMarketOverride = useTerminalStore((state) => state.selectedMarketOverride);
   const executionMode = useTerminalStore((state) => state.executionMode);
   const setExecutionMode = useTerminalStore((state) => state.setExecutionMode);
   const selectedOutcomeLabel = useTerminalStore((state) => state.selectedOutcomeLabel);
@@ -44,7 +45,10 @@ export function TradeTicketPanel() {
   const { data: orderBook } = useOrderBookData(selectedTokenId);
   const { safeStatus } = useSafeStatus();
 
-  const activeMarket = markets?.find((market) => market.conditionId === selectedMarketId);
+  const activeMarket =
+    markets?.find((market) => market.conditionId === selectedMarketId) ??
+    selectedMarketOverride ??
+    null;
   const marketOutcomes = activeMarket?.outcomes ?? [];
 
   const bestBid =

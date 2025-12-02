@@ -62,6 +62,7 @@ function MarketSearchInput({ fullWidth }: MarketSearchInputProps) {
         market.outcomes?.[0]?.label ??
         'Yes',
       openDepthOverlay: true,
+      market,
     });
     setValue('');
     setFocused(false);
@@ -95,6 +96,7 @@ function MarketSearchInput({ fullWidth }: MarketSearchInputProps) {
         first.outcomes?.[0]?.label ??
         'Yes',
       openDepthOverlay: true,
+      market: first,
     });
     autoSelectedRef.current = { query: debounced, marketId: first.conditionId };
   }, [debounced, results, setSelection]);

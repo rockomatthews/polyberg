@@ -17,9 +17,13 @@ export function DepthLadderPanel() {
   const selectedMarketId = useTerminalStore((state) => state.selectedMarketId);
   const selectedTokenId = useTerminalStore((state) => state.selectedTokenId);
   const selectedMarketQuestion = useTerminalStore((state) => state.selectedMarketQuestion);
+  const selectedMarketOverride = useTerminalStore((state) => state.selectedMarketOverride);
   const selectedOutcomeLabel = useTerminalStore((state) => state.selectedOutcomeLabel);
   const { data: orderBook, isFetching } = useOrderBookData(selectedTokenId);
-  const activeMarket = markets?.find((market) => market.conditionId === selectedMarketId);
+  const activeMarket =
+    markets?.find((market) => market.conditionId === selectedMarketId) ??
+    selectedMarketOverride ??
+    null;
 
   const ladderRows = React.useMemo(() => {
     if (!orderBook) return [];

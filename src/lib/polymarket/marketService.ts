@@ -210,13 +210,16 @@ async function fetchSamplingMarkets(): Promise<ClobMarket[]> {
   }
 }
 
+const SPORTS_TARGET_COUNT = 60;
+const SPORTS_LOOKAHEAD_HOURS = 72;
+const SPORTS_LOOKBACK_HOURS = 8;
+
 async function fetchEligibleMarkets(now: number) {
   const samplingMarkets = await fetchSamplingMarkets();
   const fallbackMarkets =
     samplingMarkets.length === 0 ? ((await clobClient.getMarkets()).data as ClobMarket[]) : [];
-  const sourceMarkets = samplingMarkets.length ? samplingMarkets : fallbackMarkets;
-
-  return sourceMarkets.filter((market) => {
+  const baseMarkets = samplingMarkets.length ? samplingMarkets : fallbackMarkets;
+  const eligible = baseMarkets.filter((market) => {
     if (!market.active) return false;
     if (market.archived) return false;
     if (market.closed) return false;
@@ -227,6 +230,8 @@ async function fetchEligibleMarkets(now: number) {
     }
     return (market.tokens?.length ?? 0) > 0;
   });
+
+  return ensureSportsCoverage(eligible, now);
 }
 
 function pickFeaturedMarkets(markets: ClobMarket[], limit: number, now: number) {
@@ -320,6 +325,78 @@ function resolvePriorityScore(market: ClobMarket, now: number) {
   const freshnessScore = 1 / ageHours;
   const liquidityScore = liquidity ? Math.log10(liquidity + 10) : 0;
   return liquidityScore * 0.6 + freshnessScore * 0.4;
+}
+
+async function ensureSportsCoverage(markets: ClobMarket[], now: number) {
+  const sportsCount = markets.filter((market) => resolveCategory(market) === 'sports').length;
+  if (sportsCount >= SPORTS_TARGET_COUNT) {
+    return markets;
+  }
+  const needed = SPORTS_TARGET_COUNT - sportsCount;
+  const existingIds = new Set(markets.map((market) => market.condition_id));
+  const supplemental = await fetchSportsSlate(now, needed, existingIds);
+  if (!supplemental.length) {
+    return markets;
+  }
+  return [...markets, ...supplemental];
+}
+
+async function fetchSportsSlate(
+  now: number,
+  needed: number,
+  existingIds: Set<string>,
+): Promise<ClobMarket[]> {
+  if (needed <= 0) {
+    return [];
+  }
+  try {
+    const response = await clobClient.getMarkets();
+    const markets = response.data as ClobMarket[];
+    const startWindow = now - SPORTS_LOOKBACK_HOURS * 60 * 60 * 1000;
+    const endWindow = now + SPORTS_LOOKAHEAD_HOURS * 60 * 60 * 1000;
+    return markets
+      .filter((market) => !existingIds.has(market.condition_id))
+      .filter((market) => resolveCategory(market) === 'sports')
+      .filter((market) => {
+        if (!market.active || market.archived || market.closed) {
+          return false;
+        }
+        const start = resolveEventStartTimestamp(market);
+        const end = resolveEndTimestamp(market.end_date_iso ?? market.endDate);
+        const reference = start ?? end;
+        if (!reference) {
+          return false;
+        }
+        return reference >= startWindow && reference <= endWindow;
+      })
+      .sort((a, b) => {
+        const aStart = resolveEventStartTimestamp(a) ?? resolveEndTimestamp(a.end_date_iso ?? a.endDate) ?? Infinity;
+        const bStart = resolveEventStartTimestamp(b) ?? resolveEndTimestamp(b.end_date_iso ?? b.endDate) ?? Infinity;
+        return aStart - bStart;
+      })
+      .slice(0, needed);
+  } catch (error) {
+    logger.warn('markets.sportsSlate.failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
+}
+
+function resolveEventStartTimestamp(market: ClobMarket) {
+  const candidates = [
+    market.events?.[0]?.startDate,
+    market.events?.[0]?.creationDate,
+    market.startDate,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const ts = Date.parse(candidate);
+    if (!Number.isNaN(ts)) {
+      return ts;
+    }
+  }
+  return null;
 }
 
 

@@ -21,41 +21,35 @@ export function SafeSummary() {
   const [balanceError, setBalanceError] = React.useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = React.useState<Date | null>(null);
 
-  React.useEffect(() => {
-    let active = true;
-    const loadBalance = async () => {
-      if (!safeAddress) return;
-      try {
-        setLoadingBalance(true);
-        const response = await fetch(`/api/profile/safe-balance?safe=${safeAddress}`);
-        const json = await response.json();
-        if (!response.ok) {
-          throw new Error(json.error || 'Unable to fetch Safe balance');
-        }
-        if (active) {
-          setBalance(typeof json.balance === 'number' ? json.balance : null);
-          setLastUpdated(new Date());
-          setBalanceError(null);
-        }
-      } catch (error) {
-        if (active) {
-          setBalanceError(error instanceof Error ? error.message : 'Safe balance unavailable');
-        }
-      } finally {
-        if (active) {
-          setLoadingBalance(false);
-        }
+  const loadBalance = React.useCallback(async () => {
+    if (!safeAddress) return;
+    try {
+      setLoadingBalance(true);
+      const response = await fetch(`/api/profile/safe-balance?safe=${safeAddress}`);
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json.error || 'Unable to fetch Safe balance');
       }
-    };
-
-    if (safeStatus?.state === 'ready') {
-      void loadBalance();
+      setBalance(typeof json.balance === 'number' ? json.balance : null);
+      setLastUpdated(new Date());
+      setBalanceError(null);
+    } catch (error) {
+      setBalanceError(error instanceof Error ? error.message : 'Safe balance unavailable');
+    } finally {
+      setLoadingBalance(false);
     }
+  }, [safeAddress]);
 
-    return () => {
-      active = false;
-    };
-  }, [safeAddress, safeStatus?.state]);
+  React.useEffect(() => {
+    if (!safeAddress || safeStatus?.state !== 'ready') {
+      return;
+    }
+    void loadBalance();
+    const interval = setInterval(() => {
+      void loadBalance();
+    }, 15_000);
+    return () => clearInterval(interval);
+  }, [safeAddress, safeStatus?.state, loadBalance]);
 
   const copySafe = React.useCallback(() => {
     if (safeAddress) {
@@ -163,22 +157,34 @@ export function SafeSummary() {
           </IconButton>
         </Tooltip>
       </Stack>
-      <Stack direction="row" spacing={1} alignItems="center">
-        <Typography variant="body2" color="text.secondary">
-          Balance
-        </Typography>
-        {loadingBalance ? (
-          <CircularProgress size={14} />
-        ) : (
-          <Typography fontWeight={600}>
-            {balance != null ? `$${balance.toFixed(2)} USDC` : '--'}
+      <Stack spacing={0.5}>
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+          <Typography variant="body2" color="text.secondary">
+            Balance
           </Typography>
-        )}
-        {lastUpdated ? (
-          <Typography variant="caption" color="text.secondary">
-            Updated {lastUpdated.toLocaleTimeString()}
-          </Typography>
-        ) : null}
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => loadBalance()}
+            disabled={loadingBalance}
+          >
+            Refresh
+          </Button>
+        </Stack>
+        <Stack direction="row" spacing={1} alignItems="center">
+          {loadingBalance ? (
+            <CircularProgress size={14} />
+          ) : (
+            <Typography fontWeight={600}>
+              {balance != null ? `$${balance.toFixed(2)} USDC` : '--'}
+            </Typography>
+          )}
+          {lastUpdated ? (
+            <Typography variant="caption" color="text.secondary">
+              Updated {lastUpdated.toLocaleTimeString()}
+            </Typography>
+          ) : null}
+        </Stack>
       </Stack>
       {balanceError ? (
         <Typography variant="caption" color="error.main">

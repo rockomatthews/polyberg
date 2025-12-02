@@ -45,20 +45,20 @@ function extractErrorCode(error: unknown): string | undefined {
   return undefined;
 }
 
-export async function GET(request: NextRequest) {
+export async function handleSafeBalance(request: NextRequest, safeOverride?: string) {
   if (!hasRelayer) {
     return NextResponse.json({ error: 'Relayer URL not configured' }, { status: 400 });
   }
 
   const { searchParams } = new URL(request.url);
-  const safeAddressParam = searchParams.get('safe')?.trim();
+  const safeAddressParam = safeOverride?.trim() ?? searchParams.get('safe')?.trim();
   if (!safeAddressParam) {
     return NextResponse.json({ error: 'Safe address required' }, { status: 400 });
   }
 
   let safeAddress: string;
   try {
-    safeAddress = getAddress(safeAddressParam);
+    safeAddress = getAddress(safeAddressParam.toLowerCase());
   } catch {
     return NextResponse.json({ error: 'Invalid Safe address' }, { status: 400 });
   }
@@ -142,5 +142,9 @@ export async function GET(request: NextRequest) {
     },
     { status: 502 },
   );
+}
+
+export async function GET(request: NextRequest) {
+  return handleSafeBalance(request);
 }
 

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   POLYMARKET_API_HOST: z.string().url().default('https://clob.polymarket.com'),
+  POLYMARKET_GAMMA_API_HOST: z.string().url().default('https://gamma-api.polymarket.com'),
   POLYMARKET_CHAIN_ID: z.coerce.number().default(137),
   POLYMARKET_L2_API_KEY: z.string().optional(),
   POLYMARKET_L2_API_SECRET: z.string().optional(),
@@ -45,6 +46,7 @@ const builderApiPassphrase =
 
 export const env = {
   polymarketApiHost: data.POLYMARKET_API_HOST,
+  gammaApiHost: data.POLYMARKET_GAMMA_API_HOST,
   polymarketChainId: data.POLYMARKET_CHAIN_ID,
   l2ApiCreds:
     data.POLYMARKET_L2_API_KEY && data.POLYMARKET_L2_API_SECRET && data.POLYMARKET_L2_API_PASSPHRASE

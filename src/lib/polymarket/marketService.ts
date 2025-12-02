@@ -35,6 +35,34 @@ type ClobMarket = {
   }>;
 };
 
+type GammaMarket = {
+  conditionId?: string;
+  slug?: string;
+  question?: string;
+  tags?: string[];
+  categories?: string[];
+  startDate?: string;
+  endDate?: string;
+  closeDate?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  tokens?: Array<{
+    id?: string;
+    tokenId?: string;
+    outcome?: string;
+    price?: number | string | null;
+    priceCents?: number | null;
+  }>;
+  outcomes?: Array<{
+    id?: string;
+    tokenId?: string;
+    outcome?: string;
+    price?: number | string | null;
+    priceCents?: number | null;
+  }>;
+  liquidity?: number | string | null;
+};
+
 type SamplingPayload = {
   data: ClobMarket[];
   limit: number;
@@ -210,9 +238,9 @@ async function fetchSamplingMarkets(): Promise<ClobMarket[]> {
   }
 }
 
-const SPORTS_TARGET_COUNT = 60;
-const SPORTS_LOOKAHEAD_HOURS = 72;
-const SPORTS_LOOKBACK_HOURS = 8;
+const SPORTS_TARGET_COUNT = 120;
+const SPORTS_LOOKAHEAD_HOURS = 24 * 7;
+const SPORTS_LOOKBACK_HOURS = 12;
 
 async function fetchEligibleMarkets(now: number) {
   const samplingMarkets = await fetchSamplingMarkets();
@@ -334,7 +362,17 @@ async function ensureSportsCoverage(markets: ClobMarket[], now: number) {
   }
   const needed = SPORTS_TARGET_COUNT - sportsCount;
   const existingIds = new Set(markets.map((market) => market.condition_id));
-  const supplemental = await fetchSportsSlate(now, needed, existingIds);
+  const supplemental: ClobMarket[] = [];
+
+  const slate = await fetchSportsSlate(now, needed, existingIds);
+  slate.forEach((market) => existingIds.add(market.condition_id));
+  supplemental.push(...slate);
+
+  if (supplemental.length < needed) {
+    const gammaSlate = await fetchGammaSportsMarkets(needed - supplemental.length, existingIds);
+    supplemental.push(...gammaSlate);
+  }
+
   if (!supplemental.length) {
     return markets;
   }
@@ -397,6 +435,93 @@ function resolveEventStartTimestamp(market: ClobMarket) {
     }
   }
   return null;
+}
+
+async function fetchGammaSportsMarkets(
+  needed: number,
+  existingIds: Set<string>,
+): Promise<ClobMarket[]> {
+  if (needed <= 0) {
+    return [];
+  }
+  try {
+    const url = new URL('/markets', env.gammaApiHost);
+    url.searchParams.set('limit', String(Math.min(needed * 3, 300)));
+    url.searchParams.set('tag', 'sports');
+    url.searchParams.set('status', 'active');
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'polyberg-sports-fetch/1.0',
+      },
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      throw new Error(`Gamma markets request failed with ${response.status}`);
+    }
+    const payload = (await response.json()) as { data?: GammaMarket[] } | GammaMarket[];
+    const markets = Array.isArray(payload) ? payload : payload.data ?? [];
+    const normalized: ClobMarket[] = [];
+    for (const market of markets) {
+      const conditionId = market.conditionId ?? '';
+      if (!conditionId || existingIds.has(conditionId)) {
+        continue;
+      }
+      const tokens = market.tokens ?? market.outcomes ?? [];
+      const parsedTokens = tokens
+        .filter((token) => token.tokenId || token.id)
+        .map((token) => ({
+          token_id: token.tokenId ?? token.id ?? null,
+          outcome: token.outcome ?? null,
+          price:
+            token.priceCents != null
+              ? Number(token.priceCents) / 100
+              : token.price != null
+              ? typeof token.price === 'string'
+                ? Number(token.price)
+                : token.price
+              : null,
+        }));
+
+      normalized.push({
+        question: market.question ?? '',
+        market_slug: market.slug ?? conditionId,
+        tags: market.tags ?? market.categories ?? ['sports'],
+        tokens: parsedTokens,
+        enable_order_book: true,
+        active: true,
+        condition_id: conditionId,
+        icon: null,
+        image: null,
+        end_date_iso: market.endDate ?? market.closeDate ?? null,
+        endDate: market.endDate ?? market.closeDate ?? null,
+        createdAt: market.createdAt ?? null,
+        updatedAt: market.updatedAt ?? null,
+        startDate: market.startDate ?? null,
+        liquidity:
+          typeof market.liquidity === 'string'
+            ? Number(market.liquidity)
+            : market.liquidity ?? null,
+        liquidityNum:
+          typeof market.liquidity === 'string'
+            ? Number(market.liquidity)
+            : (market.liquidity as number | null | undefined) ?? null,
+        events: [],
+        archived: false,
+        accepting_orders: true,
+        closed: false,
+      });
+
+      if (normalized.length >= needed) {
+        break;
+      }
+    }
+    return normalized;
+  } catch (error) {
+    logger.warn('markets.gammaSports.failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
 }
 
 

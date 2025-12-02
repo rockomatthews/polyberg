@@ -60,6 +60,24 @@ const CATEGORY_FILTERS = [
   { id: 'macro', label: 'Macro' },
 ] as const;
 
+const SPORTS_LEAGUE_FILTERS = [
+  { id: 'all', label: 'All Sports' },
+  { id: 'nfl', label: 'NFL' },
+  { id: 'nba', label: 'NBA' },
+  { id: 'nhl', label: 'NHL' },
+  { id: 'mlb', label: 'MLB' },
+  { id: 'soccer', label: 'Soccer' },
+  { id: 'cfb', label: 'CFB' },
+  { id: 'cbb', label: 'CBB' },
+  { id: 'mma', label: 'MMA' },
+  { id: 'golf', label: 'Golf' },
+  { id: 'tennis', label: 'Tennis' },
+  { id: 'esports', label: 'Esports' },
+  { id: 'other', label: 'Other' },
+] as const;
+
+type SportsLeagueFilter = (typeof SPORTS_LEAGUE_FILTERS)[number]['id'];
+
 export function WatchlistPanel() {
   const { data, isFetching } = useMarketsData();
   const markets = React.useMemo(() => data ?? [], [data]);
@@ -70,6 +88,14 @@ export function WatchlistPanel() {
   const [favoritesOnly, setFavoritesOnly] = React.useState(false);
   const [categoryFilter, setCategoryFilter] =
     React.useState<(typeof CATEGORY_FILTERS)[number]['id']>('all');
+  const [sportsLeagueFilter, setSportsLeagueFilter] =
+    React.useState<SportsLeagueFilter>('all');
+
+  React.useEffect(() => {
+    if (categoryFilter !== 'sports') {
+      setSportsLeagueFilter('all');
+    }
+  }, [categoryFilter]);
 
   const defaultMarket = React.useMemo(
     () => markets.find((market) => market.primaryTokenId),
@@ -111,14 +137,45 @@ export function WatchlistPanel() {
       }
       return list.filter((market) => deriveCategory(market) === categoryFilter);
     };
+    const applySportsLeague = (list: Market[]) => {
+      if (categoryFilter !== 'sports' || sportsLeagueFilter === 'all') {
+        return list;
+      }
+      return list.filter(
+        (market) => deriveSportsLeague(market) === sportsLeagueFilter,
+      );
+    };
+
+    const maybeSortSports = (list: Market[]) => {
+      if (categoryFilter !== 'sports') {
+        return list;
+      }
+      return [...list].sort((a, b) => {
+        const aTime = a.endDate ? new Date(a.endDate).getTime() : Number.POSITIVE_INFINITY;
+        const bTime = b.endDate ? new Date(b.endDate).getTime() : Number.POSITIVE_INFINITY;
+        return aTime - bTime;
+      });
+    };
+
     if (favoritesOnly) {
-      return applyCategory(sortedMarkets.filter((market) => watchlist.includes(market.conditionId)));
+      return maybeSortSports(
+        applySportsLeague(
+          applyCategory(sortedMarkets.filter((market) => watchlist.includes(market.conditionId))),
+        ),
+      );
     }
     if (sortedMarkets.length) {
-      return applyCategory(sortedMarkets);
+      return maybeSortSports(applySportsLeague(applyCategory(sortedMarkets)));
     }
-    return applyCategory(autoMarkets);
-  }, [favoritesOnly, sortedMarkets, watchlist, autoMarkets, categoryFilter]);
+    return maybeSortSports(applySportsLeague(applyCategory(autoMarkets)));
+  }, [
+    favoritesOnly,
+    sortedMarkets,
+    watchlist,
+    autoMarkets,
+    categoryFilter,
+    sportsLeagueFilter,
+  ]);
 
   return (
     <PanelCard title="Watchlist" subtitle="Markets">
@@ -152,6 +209,20 @@ export function WatchlistPanel() {
             />
           ))}
         </Stack>
+        {categoryFilter === 'sports' ? (
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            {SPORTS_LEAGUE_FILTERS.map((filter) => (
+              <Chip
+                key={filter.id}
+                size="small"
+                label={filter.label}
+                variant={sportsLeagueFilter === filter.id ? 'filled' : 'outlined'}
+                color={sportsLeagueFilter === filter.id ? 'secondary' : 'default'}
+                onClick={() => setSportsLeagueFilter(filter.id)}
+              />
+            ))}
+          </Stack>
+        ) : null}
         {autoMarkets.length > 0 && !watchlist.length ? (
           <Alert severity="info" variant="outlined">
             Showing a rotating mix of trending Polymarket markets. Star any card to pin it to your
@@ -488,6 +559,23 @@ function shuffle<T>(input: T[]): T[] {
   return arr;
 }
 
+type SportsLeagueCategory = Exclude<SportsLeagueFilter, 'all'> | 'other';
+
+const SPORTS_KEYWORDS: Record<SportsLeagueCategory, string[]> = {
+  nfl: ['nfl', 'patriots', 'chiefs', 'eagles', 'cowboys', 'vikings', 'jets', 'giants'],
+  nba: ['nba', 'lakers', 'celtics', 'bucks', 'nuggets', 'warriors', 'heat', 'suns'],
+  nhl: ['nhl', 'rangers', 'bruins', 'maple leafs', 'avalanche', 'oilers'],
+  mlb: ['mlb', 'yankees', 'dodgers', 'braves', 'astros', 'phillies', 'mets'],
+  soccer: ['soccer', 'premier league', 'man city', 'arsenal', 'barcelona', 'real madrid', 'mls', 'bundesliga'],
+  cfb: ['cfb', 'college football', 'alabama', 'georgia', 'ohio state', 'notre dame', 'longhorns'],
+  cbb: ['cbb', 'college basketball', 'march madness', 'duke', 'kentucky', 'kansas', 'uconn'],
+  mma: ['mma', 'ufc', 'fight', 'bantamweight', 'featherweight'],
+  golf: ['golf', 'pga', 'masters', 'open championship'],
+  tennis: ['tennis', 'atp', 'wta', 'grand slam', 'wimbledon', 'us open', 'roland garros'],
+  esports: ['esports', 'league of legends', 'cs2', 'valorant', 'dota', 'overwatch'],
+  other: [],
+};
+
 function deriveCategory(market: Market): MarketCategory {
   if (market.category) {
     return market.category;
@@ -524,6 +612,20 @@ function deriveCategory(market: Market): MarketCategory {
     matches(['inflation', 'economy', 'gdp', 'climate', 'war', 'disease', 'hurricane'])
   ) {
     return 'macro';
+  }
+  return 'other';
+}
+
+function deriveSportsLeague(market: Market): SportsLeagueFilter {
+  if (deriveCategory(market) !== 'sports') {
+    return 'other';
+  }
+  const haystack = `${market.question} ${market.tag ?? ''}`.toLowerCase();
+  const leagues = Object.keys(SPORTS_KEYWORDS) as SportsLeagueCategory[];
+  for (const league of leagues) {
+    if (SPORTS_KEYWORDS[league].some((keyword) => haystack.includes(keyword))) {
+      return league;
+    }
   }
   return 'other';
 }

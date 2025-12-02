@@ -186,8 +186,6 @@ export function TradeTicketPanel() {
     );
   }
 
-  const quickAmounts = [25, 100, 250, 500];
-
   return (
     <PanelCard
       title="Sniper Ticket"
@@ -272,68 +270,49 @@ export function TradeTicketPanel() {
           <Typography variant="caption" color="text.secondary">
             Amount (USD)
           </Typography>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+          <TextField
+            variant="outlined"
+            size="medium"
+            type="number"
+            value={amountUsd}
+            inputProps={{ min: 1, step: 1, style: { fontSize: '1.2rem', padding: '14px 12px' } }}
+            onChange={(event) => {
+              const next = Number(event.target.value);
+              setAmountUsd(Number.isFinite(next) ? next : 0);
+            }}
+            fullWidth
+          />
+        </Stack>
+
+        {!isMarketOrder ? (
+          <Stack spacing={1}>
+            <Typography variant="caption" color="text.secondary">
+              Limit price (¢)
+            </Typography>
             <TextField
               variant="outlined"
               size="small"
               type="number"
-              value={amountUsd}
-              inputProps={{ min: 1, step: 1 }}
+              value={Number.isFinite(limitPrice) ? limitPrice : ''}
+              inputProps={{ min: 1, max: 99, step: 0.1 }}
               onChange={(event) => {
                 const next = Number(event.target.value);
-                setAmountUsd(Number.isFinite(next) ? next : 0);
+                setLimitPrice(
+                  Number.isFinite(next) ? Math.min(99.9, Math.max(0.1, next)) : limitPrice,
+                );
               }}
               fullWidth
+              helperText="Orders rest on the book until filled or cancelled."
             />
-            <Stack direction="row" spacing={1} flexWrap="wrap">
-              {quickAmounts.map((preset) => (
-                <Button
-                  key={preset}
-                  size="small"
-                  variant={amountUsd === preset ? 'contained' : 'outlined'}
-                  onClick={() => setAmountUsd(preset)}
-                >
-                  +${preset}
-                </Button>
-              ))}
-            </Stack>
           </Stack>
-        </Stack>
-
-        <Stack spacing={1}>
-          <Typography variant="caption" color="text.secondary">
-            {isMarketOrder ? 'Market reference price (¢)' : 'Limit price (¢)'}
-          </Typography>
-          <TextField
-            variant="outlined"
-            size="small"
-            type="number"
-            disabled={isMarketOrder}
-            value={
-              isMarketOrder
-                ? marketPriceCents != null
-                  ? Number(marketPriceCents).toFixed(2)
-                  : ''
-                : Number.isFinite(limitPrice)
-                ? limitPrice
-                : ''
-            }
-            inputProps={{ min: 1, max: 99, step: 0.1 }}
-            onChange={(event) => {
-              if (isMarketOrder) return;
-              const next = Number(event.target.value);
-              setLimitPrice(
-                Number.isFinite(next) ? Math.min(99.9, Math.max(0.1, next)) : limitPrice,
-              );
-            }}
-            fullWidth
-            helperText={
-              isMarketOrder
-                ? 'Auto-tracks best available price.'
-                : 'Orders rest on the book until filled or cancelled.'
-            }
-          />
-        </Stack>
+        ) : (
+          <Stack spacing={0.25}>
+            <Typography variant="caption" color="text.secondary">
+              Market order will execute at best available book price (currently{' '}
+              {marketPriceCents != null ? `${Number(marketPriceCents).toFixed(2)}¢` : '––'}).
+            </Typography>
+          </Stack>
+        )}
 
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
           <TextField

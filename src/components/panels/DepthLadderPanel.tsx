@@ -17,6 +17,7 @@ export function DepthLadderPanel() {
   const selectedMarketId = useTerminalStore((state) => state.selectedMarketId);
   const selectedTokenId = useTerminalStore((state) => state.selectedTokenId);
   const selectedMarketQuestion = useTerminalStore((state) => state.selectedMarketQuestion);
+  const selectedOutcomeLabel = useTerminalStore((state) => state.selectedOutcomeLabel);
   const { data: orderBook, isFetching } = useOrderBookData(selectedTokenId);
   const activeMarket = markets?.find((market) => market.conditionId === selectedMarketId);
 
@@ -36,7 +37,13 @@ export function DepthLadderPanel() {
   return (
     <PanelCard
       title={activeMarket?.question ?? selectedMarketQuestion ?? 'Order Book'}
-      subtitle={activeMarket ? 'Depth Ladder' : 'Select a market'}
+      subtitle={
+        activeMarket
+          ? selectedOutcomeLabel
+            ? `${selectedOutcomeLabel} depth`
+            : 'Depth ladder'
+          : 'Select a market'
+      }
       minHeight={320}
     >
       <Stack direction="row" spacing={1} alignItems="center">

@@ -77,6 +77,15 @@ export async function loadMarketSnapshots(
 async function hydrateMarkets(markets: ClobMarket[]): Promise<Market[]> {
   return Promise.all(
     markets.map(async (market) => {
+      const category = resolveCategory(market);
+      const outcomes =
+        market.tokens
+          ?.slice(0, 3)
+          .map((token) => ({
+            tokenId: token.token_id ?? null,
+            label: token.outcome ?? null,
+            price: token.price != null ? Number(token.price) * 100 : null,
+          })) ?? [];
       const primaryToken = market.tokens?.[0];
       let bestBid: number | null = null;
       let bestAsk: number | null = null;
@@ -120,6 +129,8 @@ async function hydrateMarkets(markets: ClobMarket[]): Promise<Market[]> {
             ? Number(Math.abs(bestAsk - bestBid).toFixed(2))
             : null,
         liquidity,
+        outcomes,
+        category,
       } satisfies Market;
     }),
   );

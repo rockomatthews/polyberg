@@ -57,6 +57,10 @@ function MarketSearchInput({ fullWidth }: MarketSearchInputProps) {
       marketId: market.conditionId,
       tokenId: market.primaryTokenId,
       question: market.question,
+      outcomeLabel:
+        market.primaryOutcome ??
+        market.outcomes?.[0]?.label ??
+        'Yes',
       openDepthOverlay: true,
     });
     setValue('');
@@ -86,6 +90,10 @@ function MarketSearchInput({ fullWidth }: MarketSearchInputProps) {
       marketId: first.conditionId,
       tokenId: first.primaryTokenId,
       question: first.question,
+      outcomeLabel:
+        first.primaryOutcome ??
+        first.outcomes?.[0]?.label ??
+        'Yes',
       openDepthOverlay: true,
     });
     autoSelectedRef.current = { query: debounced, marketId: first.conditionId };

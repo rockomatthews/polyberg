@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import Alert from '@mui/material/Alert';
+import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import LinearProgress from '@mui/material/LinearProgress';
 import Skeleton from '@mui/material/Skeleton';
@@ -19,6 +20,18 @@ import { useTerminalStore } from '@/state/useTerminalStore';
 import { useUserWatchlist } from '@/hooks/useWatchlist';
 import type { Market } from '@/lib/api/types';
 
+type OutcomeButtonTone = 'yes' | 'no' | 'neutral' | 'team-a' | 'team-b';
+
+type OutcomeButtonOption = {
+  label: string;
+  tokenId: string | null;
+  price: number | null;
+  tone: OutcomeButtonTone;
+};
+
+const YES_KEYWORDS = ['yes', 'up', 'over', 'higher', 'will', 'pass'];
+const NO_KEYWORDS = ['no', 'down', 'under', 'lower', 'won\'t', 'fail'];
+
 const getTimeLeftLabel = (endDate: string | null) => {
   if (!endDate) return '––';
   const delta = new Date(endDate).getTime() - Date.now();
@@ -30,9 +43,6 @@ const getTimeLeftLabel = (endDate: string | null) => {
   const minutes = Math.floor(delta / (1000 * 60));
   return `${minutes}m`;
 };
-
-const formatPrice = (value: number | null) =>
-  value != null ? `${value.toFixed(2)}¢` : '––';
 
 const formatLiquidity = (value: number | null) => {
   if (value == null || Number.isNaN(value)) return '––';
@@ -71,6 +81,10 @@ export function WatchlistPanel() {
         marketId: defaultMarket.conditionId,
         tokenId: defaultMarket.primaryTokenId,
         question: defaultMarket.question,
+        outcomeLabel:
+          defaultMarket.primaryOutcome ??
+          defaultMarket.outcomes?.[0]?.label ??
+          'Yes',
         openDepthOverlay: false,
       });
     }
@@ -163,6 +177,8 @@ export function WatchlistPanel() {
               const spreadLabel =
                 market.spread != null ? `${market.spread.toFixed(2)}¢` : '––';
               const isFavorite = watchlist.includes(market.conditionId);
+              const category = getMarketCategory(market);
+              const outcomeOptions = buildOutcomeOptions(market);
               return (
                 <Stack
                   key={market.conditionId}
@@ -172,6 +188,10 @@ export function WatchlistPanel() {
                       marketId: market.conditionId,
                       tokenId: market.primaryTokenId,
                       question: market.question,
+                      outcomeLabel:
+                        market.primaryOutcome ??
+                        market.outcomes?.[0]?.label ??
+                        'Yes',
                       openDepthOverlay: true,
                     })
                   }
@@ -216,14 +236,33 @@ export function WatchlistPanel() {
                       </IconButton>
                     </Tooltip>
                   </Stack>
-                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                    <Chip size="small" label={`Spread ${spreadLabel}`} />
-                    <Chip size="small" variant="outlined" label={`${getTimeLeftLabel(market.endDate)} left`} />
+                  <Typography variant="caption" color="text.secondary">
+                    {category.charAt(0).toUpperCase() + category.slice(1)} • Ends in{' '}
+                    {getTimeLeftLabel(market.endDate)}
+                  </Typography>
+                  <Stack direction="row" spacing={1} alignItems="stretch" flexWrap="wrap">
+                    {outcomeOptions.map((option, index) => (
+                      <OutcomeButton
+                        key={`${market.conditionId}-${index}-${option.tokenId ?? option.label}`}
+                        option={option}
+                        active={Boolean(
+                          option.tokenId && option.tokenId === selectedTokenId,
+                        )}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelection({
+                            marketId: market.conditionId,
+                            tokenId: option.tokenId ?? market.primaryTokenId,
+                            question: market.question,
+                            outcomeLabel: option.label,
+                            openDepthOverlay: true,
+                          });
+                        }}
+                      />
+                    ))}
                   </Stack>
-                  <Stack direction="row" justifyContent="space-between" alignItems="center">
-                    <Typography variant="body2">
-                      Bid {formatPrice(market.bestBid)} / Ask {formatPrice(market.bestAsk)}
-                    </Typography>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap">
+                    <Chip size="small" label={`Spread ${spreadLabel}`} />
                     <Typography variant="caption" color="text.secondary">
                       Liquidity {formatLiquidity(market.liquidity)}
                     </Typography>
@@ -254,6 +293,160 @@ export function WatchlistPanel() {
       </Typography>
     </PanelCard>
   );
+}
+
+type OutcomeButtonProps = {
+  option: OutcomeButtonOption;
+  active: boolean;
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
+};
+
+function OutcomeButton({ option, active, onClick }: OutcomeButtonProps) {
+  const palette = resolveOutcomePalette(option.tone, active);
+  return (
+    <Button
+      onClick={onClick}
+      variant="outlined"
+      size="small"
+      sx={{
+        flex: '1 1 120px',
+        minWidth: 0,
+        borderRadius: 1.5,
+        borderWidth: 1,
+        borderColor: palette.border,
+        color: palette.text,
+        backgroundColor: palette.background,
+        textTransform: 'none',
+        justifyContent: 'flex-start',
+        px: 1.5,
+        py: 1,
+        minHeight: 64,
+        '&:hover': {
+          borderColor: palette.hoverBorder,
+          backgroundColor: palette.hoverBackground,
+        },
+      }}
+    >
+      <Stack spacing={0.5} alignItems="flex-start">
+        <Typography variant="button" sx={{ fontWeight: 600 }}>
+          {option.label}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {option.price != null ? `${option.price.toFixed(1)}¢` : 'Tap to trade'}
+        </Typography>
+      </Stack>
+    </Button>
+  );
+}
+
+function resolveOutcomePalette(tone: OutcomeButtonTone, active: boolean) {
+  const palettes: Record<OutcomeButtonTone, { text: string; border: string; background: string; hoverBorder: string; hoverBackground: string }> = {
+    yes: {
+      text: '#3efad5',
+      border: 'rgba(62,250,213,0.6)',
+      background: active ? 'rgba(62,250,213,0.12)' : 'transparent',
+      hoverBorder: '#3efad5',
+      hoverBackground: 'rgba(62,250,213,0.08)',
+    },
+    no: {
+      text: '#ff7a93',
+      border: 'rgba(255,122,147,0.6)',
+      background: active ? 'rgba(255,122,147,0.12)' : 'transparent',
+      hoverBorder: '#ff7a93',
+      hoverBackground: 'rgba(255,122,147,0.08)',
+    },
+    neutral: {
+      text: '#f3d96d',
+      border: 'rgba(243,217,109,0.6)',
+      background: active ? 'rgba(243,217,109,0.12)' : 'transparent',
+      hoverBorder: '#f3d96d',
+      hoverBackground: 'rgba(243,217,109,0.08)',
+    },
+    'team-a': {
+      text: '#6fc3ff',
+      border: 'rgba(111,195,255,0.6)',
+      background: active ? 'rgba(111,195,255,0.12)' : 'transparent',
+      hoverBorder: '#6fc3ff',
+      hoverBackground: 'rgba(111,195,255,0.08)',
+    },
+    'team-b': {
+      text: '#b18dff',
+      border: 'rgba(177,141,255,0.6)',
+      background: active ? 'rgba(177,141,255,0.12)' : 'transparent',
+      hoverBorder: '#b18dff',
+      hoverBackground: 'rgba(177,141,255,0.08)',
+    },
+  };
+  return palettes[tone];
+}
+
+function getMarketCategory(market: Market) {
+  return market.category ?? deriveCategory(market);
+}
+
+function buildOutcomeOptions(market: Market): OutcomeButtonOption[] {
+  const category = getMarketCategory(market);
+  const tokens = market.outcomes?.length ? market.outcomes : [];
+  if (category === 'sports' && tokens.length >= 2) {
+    const sportsTokens = tokens.slice(0, 3);
+    return sportsTokens.map((token, index) => ({
+      label:
+        token.label ??
+        (index === 1 && sportsTokens.length === 3 ? 'Draw' : `Outcome ${index + 1}`),
+      tokenId: token.tokenId ?? (index === 0 ? market.primaryTokenId : market.secondaryTokenId),
+      price: token.price ?? null,
+      tone: resolveSportsTone(index, sportsTokens.length),
+    }));
+  }
+  const yesOutcome = resolveBinaryOutcome(market, tokens, 'yes');
+  const noOutcome = resolveBinaryOutcome(market, tokens, 'no', yesOutcome.price);
+  return [yesOutcome, noOutcome];
+}
+
+function resolveSportsTone(index: number, length: number): OutcomeButtonTone {
+  if (index === 1 && length === 3) {
+    return 'neutral';
+  }
+  return index === 0 ? 'team-a' : 'team-b';
+}
+
+function resolveBinaryOutcome(
+  market: Market,
+  tokens: Market['outcomes'],
+  mode: 'yes' | 'no',
+  pairedPrice?: number | null,
+): OutcomeButtonOption {
+  const keywords = mode === 'yes' ? YES_KEYWORDS : NO_KEYWORDS;
+  const fallbackLabel = mode === 'yes' ? 'Yes' : 'No';
+  const fallbackTokenId = mode === 'yes' ? market.primaryTokenId : market.secondaryTokenId;
+  const fallbackOutcome =
+    mode === 'yes' ? market.primaryOutcome ?? fallbackLabel : market.secondaryOutcome ?? fallbackLabel;
+  const matched =
+    tokens.find((token) => {
+      const normalized = normalizeOutcomeLabel(token.label);
+      return keywords.some((word) => normalized.includes(word));
+    }) ??
+    tokens[(mode === 'yes' ? 0 : 1)] ??
+    null;
+
+  const resolvedPrice =
+    matched?.price ??
+    (mode === 'yes'
+      ? market.bestAsk ?? market.bestBid ?? null
+      : pairedPrice != null
+      ? Number((100 - pairedPrice).toFixed(2))
+      : market.bestBid ?? market.bestAsk ?? null);
+
+  return {
+    label: matched?.label ?? fallbackOutcome ?? fallbackLabel,
+    tokenId: matched?.tokenId ?? fallbackTokenId ?? null,
+    price: resolvedPrice,
+    tone: mode,
+  };
+}
+
+function normalizeOutcomeLabel(label?: string | null) {
+  return label?.toLowerCase().trim() ?? '';
 }
 
 function pickFeaturedMarkets(markets: Market[] = [], count = 12) {
@@ -295,6 +488,9 @@ function shuffle<T>(input: T[]): T[] {
 }
 
 function deriveCategory(market: Market) {
+  if (market.category) {
+    return market.category;
+  }
   const tag = market.tag?.toLowerCase() ?? '';
   const question = market.question.toLowerCase();
   const matches = (keywords: string[]) => keywords.some((word) => question.includes(word));

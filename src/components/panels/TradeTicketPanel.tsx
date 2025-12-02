@@ -4,8 +4,6 @@ import * as React from 'react';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import ButtonGroup from '@mui/material/ButtonGroup';
-import Chip from '@mui/material/Chip';
-import Slider from '@mui/material/Slider';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -41,10 +39,13 @@ export function TradeTicketPanel() {
   const selectedTokenId = useTerminalStore((state) => state.selectedTokenId);
   const executionMode = useTerminalStore((state) => state.executionMode);
   const setExecutionMode = useTerminalStore((state) => state.setExecutionMode);
+  const selectedOutcomeLabel = useTerminalStore((state) => state.selectedOutcomeLabel);
+  const setSelection = useTerminalStore((state) => state.setSelection);
   const { data: orderBook } = useOrderBookData(selectedTokenId);
   const { safeStatus } = useSafeStatus();
 
   const activeMarket = markets?.find((market) => market.conditionId === selectedMarketId);
+  const marketOutcomes = activeMarket?.outcomes ?? [];
 
   const bestBid =
     orderBook?.bids?.[0]?.price != null
@@ -56,11 +57,11 @@ export function TradeTicketPanel() {
       : activeMarket?.bestAsk ?? null;
 
   const derivedMid = deriveMidPrice(bestBid, bestAsk);
-  const [price, setPrice] = React.useState(derivedMid);
-  const [size, setSize] = React.useState(5);
+  const [amountUsd, setAmountUsd] = React.useState(100);
+  const [limitPrice, setLimitPrice] = React.useState(derivedMid);
   const [side, setSide] = React.useState<'BUY' | 'SELL'>('BUY');
   const [slippage, setSlippage] = React.useState(2);
-  const [timeInForce, setTimeInForce] = React.useState(15);
+  const [timeInForce, setTimeInForce] = React.useState(30);
 
   type SubmitPayload = {
     tokenId: string;
@@ -100,37 +101,80 @@ export function TradeTicketPanel() {
   });
 
   React.useEffect(() => {
-    if (derivedMid) {
-      setPrice(derivedMid);
+    if (Number.isFinite(derivedMid)) {
+      setLimitPrice(derivedMid);
     }
-  }, [derivedMid]);
+  }, [derivedMid, selectedTokenId]);
 
-  const handleSubmit = React.useCallback(() => {
-    if (!selectedTokenId || !activeMarket || price == null) {
+  React.useEffect(() => {
+    if (!activeMarket) {
+      return;
+    }
+    if (selectedTokenId) {
+      return;
+    }
+    const fallbackOutcome = activeMarket.outcomes?.find((outcome) => outcome.tokenId);
+    if (fallbackOutcome?.tokenId) {
+      setSelection({
+        marketId: activeMarket.conditionId,
+        tokenId: fallbackOutcome.tokenId,
+        question: activeMarket.question,
+        outcomeLabel: fallbackOutcome.label ?? activeMarket.primaryOutcome ?? 'Outcome',
+        openDepthOverlay: false,
+      });
+    }
+  }, [activeMarket, selectedTokenId, setSelection]);
+
+  const safeRequired = safeStatus?.requireSafe ?? false;
+  const safeReady = safeStatus?.state === 'ready' || !safeRequired;
+  const effectiveTokenId = selectedTokenId ?? activeMarket?.primaryTokenId ?? null;
+  const isMarketOrder = executionMode === 'aggressive';
+  const marketPriceCents =
+    side === 'BUY'
+      ? bestAsk ?? derivedMid
+      : bestBid ?? derivedMid;
+  const effectivePriceCents = isMarketOrder ? marketPriceCents : limitPrice;
+  const priceReady = effectivePriceCents != null && effectivePriceCents > 0;
+  const normalizedAmount = Number.isFinite(amountUsd) ? Math.max(1, amountUsd) : 1;
+  const sizeThousands = priceReady
+    ? normalizedAmount / ((effectivePriceCents as number) / 100) / 1000
+    : 0;
+  const estimatedShares = sizeThousands * 1000;
+  const estimatedCost =
+    priceReady && estimatedShares > 0
+      ? (estimatedShares * (effectivePriceCents as number)) / 100
+      : 0;
+  const normalizedPriceCents = priceReady ? Number((effectivePriceCents as number).toFixed(2)) : null;
+  const normalizedSizeThousands = sizeThousands > 0 ? Number(sizeThousands.toFixed(6)) : 0;
+  const submitDisabled =
+    !effectiveTokenId ||
+    placeOrder.isPending ||
+    !safeReady ||
+    normalizedPriceCents == null ||
+    normalizedSizeThousands <= 0;
+  const orderErrorCode = getOrderErrorCode(placeOrder.error);
+  const showInsufficientFunds = orderErrorCode === 'INSUFFICIENT_FUNDS';
+
+  const handleSubmit = () => {
+    if (
+      !activeMarket ||
+      !effectiveTokenId ||
+      normalizedPriceCents == null ||
+      normalizedSizeThousands <= 0
+    ) {
       return;
     }
     placeOrder.mutate({
-      tokenId: selectedTokenId,
+      tokenId: effectiveTokenId,
       marketId: selectedMarketId ?? activeMarket.conditionId,
       side,
-      price,
-      size,
+      price: normalizedPriceCents,
+      size: normalizedSizeThousands,
       executionMode,
       slippage,
       timeInForce,
     });
-  }, [
-    activeMarket,
-    executionMode,
-    placeOrder,
-    price,
-    selectedMarketId,
-    selectedTokenId,
-    side,
-    size,
-    slippage,
-    timeInForce,
-  ]);
+  };
 
   if (!activeMarket) {
     return (
@@ -142,106 +186,159 @@ export function TradeTicketPanel() {
     );
   }
 
-  const priceSliderMin = Math.max(0, derivedMid - 20);
-  const priceSliderMax = derivedMid + 20;
-  const safeRequired = safeStatus?.requireSafe ?? false;
-  const safeReady = safeStatus?.state === 'ready' || !safeRequired;
-  const submitDisabled = !selectedTokenId || placeOrder.isPending || !safeReady;
-  const orderErrorCode = getOrderErrorCode(placeOrder.error);
-  const showInsufficientFunds = orderErrorCode === 'INSUFFICIENT_FUNDS';
+  const quickAmounts = [25, 100, 250, 500];
 
   return (
     <PanelCard
       title="Sniper Ticket"
-      subtitle={activeMarket.primaryOutcome ?? activeMarket.question}
+      subtitle={
+        activeMarket
+          ? selectedOutcomeLabel
+            ? `${selectedOutcomeLabel} · ${activeMarket.question}`
+            : activeMarket.question
+          : 'Select a market to arm the ticket'
+      }
     >
       <Stack spacing={2}>
         {safeRequired && !safeReady ? (
           <Alert severity="warning" variant="outlined">
-            Gasless trading requires an active Safe. Head to your profile to deploy one, then return
-            to arm the sniper.
+            Gasless trading requires an active Safe. Deploy one from your profile, fund it with
+            Polygon USDC, then return to execute.
           </Alert>
         ) : null}
-        <Stack
-          direction={{ xs: 'column', lg: 'row' }}
-          spacing={2}
-          alignItems="stretch"
-          sx={{ width: '100%' }}
-        >
-          <Stack
-            spacing={1.5}
-            flex={{ xs: '1 1 auto', lg: '0 0 240px' }}
-            minWidth={0}
-          >
+
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+          <ButtonGroup fullWidth size="small" variant="outlined">
+            {(['BUY', 'SELL'] as const).map((option) => (
+              <Button
+                key={option}
+                color={option === 'BUY' ? 'success' : 'error'}
+                variant={side === option ? 'contained' : 'outlined'}
+                onClick={() => setSide(option)}
+              >
+                {option === 'BUY' ? 'Buy (Long)' : 'Sell (Short)'}
+              </Button>
+            ))}
+          </ButtonGroup>
+          <ButtonGroup fullWidth size="small" variant="outlined">
+            <Button
+              variant={isMarketOrder ? 'contained' : 'outlined'}
+              onClick={() => setExecutionMode('aggressive')}
+            >
+              Market
+            </Button>
+            <Button
+              variant={!isMarketOrder ? 'contained' : 'outlined'}
+              onClick={() => setExecutionMode('passive')}
+            >
+              Limit
+            </Button>
+          </ButtonGroup>
+        </Stack>
+
+        {marketOutcomes.length ? (
+          <Stack spacing={1}>
+            <Typography variant="caption" color="text.secondary">
+              Outcome
+            </Typography>
             <ButtonGroup fullWidth size="small" variant="outlined">
-              {(['BUY', 'SELL'] as const).map((option) => (
+              {marketOutcomes.map((outcome) => (
                 <Button
-                  key={option}
-                  color={option === 'BUY' ? 'success' : 'error'}
-                  variant={side === option ? 'contained' : 'outlined'}
-                  onClick={() => setSide(option)}
+                  key={outcome.tokenId ?? outcome.label ?? 'outcome'}
+                  variant={
+                    outcome.tokenId && outcome.tokenId === effectiveTokenId
+                      ? 'contained'
+                      : 'outlined'
+                  }
+                  onClick={() => {
+                    if (!outcome.tokenId || !activeMarket) return;
+                    setSelection({
+                      marketId: activeMarket.conditionId,
+                      tokenId: outcome.tokenId,
+                      question: activeMarket.question,
+                      outcomeLabel: outcome.label ?? 'Outcome',
+                      openDepthOverlay: true,
+                    });
+                  }}
                 >
-                  {option}
+                  {outcome.label ?? 'Outcome'}
                 </Button>
               ))}
             </ButtonGroup>
-            <ButtonGroup fullWidth size="small" variant="outlined">
-              <Button
-                variant={executionMode === 'aggressive' ? 'contained' : 'outlined'}
-                onClick={() => setExecutionMode('aggressive')}
-              >
-                Aggressive
-              </Button>
-              <Button
-                variant={executionMode === 'passive' ? 'contained' : 'outlined'}
-                onClick={() => setExecutionMode('passive')}
-              >
-                Passive
-              </Button>
-            </ButtonGroup>
           </Stack>
-          <Stack spacing={2} flex={1} minWidth={0}>
-            <Stack spacing={1}>
-              <Typography variant="caption" color="text.secondary">
-                Limit Price ({price.toFixed(2)}¢)
-              </Typography>
-              <Slider
-                value={price}
-                min={priceSliderMin}
-                max={priceSliderMax}
-                onChange={(_, value) => setPrice(value as number)}
-                size="small"
-              />
-            </Stack>
-            <Stack spacing={1}>
-              <Typography variant="caption" color="text.secondary">
-                Size ({size.toFixed(2)}k)
-              </Typography>
-              <Slider
-                value={size}
-                min={1}
-                max={20}
-                onChange={(_, value) => setSize(value as number)}
-                size="small"
-              />
-              <Stack direction="row" spacing={1}>
-                {[2, 5, 10].map((preset) => (
-                  <Chip
-                    key={preset}
-                    label={`${preset}k`}
-                    onClick={() => setSize(preset)}
-                    variant={size === preset ? 'filled' : 'outlined'}
-                    color={size === preset ? 'primary' : 'default'}
-                  />
-                ))}
-              </Stack>
+        ) : null}
+
+        <Stack spacing={1}>
+          <Typography variant="caption" color="text.secondary">
+            Amount (USD)
+          </Typography>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+            <TextField
+              variant="outlined"
+              size="small"
+              type="number"
+              value={amountUsd}
+              inputProps={{ min: 1, step: 1 }}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                setAmountUsd(Number.isFinite(next) ? next : 0);
+              }}
+              fullWidth
+            />
+            <Stack direction="row" spacing={1} flexWrap="wrap">
+              {quickAmounts.map((preset) => (
+                <Button
+                  key={preset}
+                  size="small"
+                  variant={amountUsd === preset ? 'contained' : 'outlined'}
+                  onClick={() => setAmountUsd(preset)}
+                >
+                  +${preset}
+                </Button>
+              ))}
             </Stack>
           </Stack>
         </Stack>
+
+        <Stack spacing={1}>
+          <Typography variant="caption" color="text.secondary">
+            {isMarketOrder ? 'Market reference price (¢)' : 'Limit price (¢)'}
+          </Typography>
+          <TextField
+            variant="outlined"
+            size="small"
+            type="number"
+            disabled={isMarketOrder}
+            value={
+              isMarketOrder
+                ? marketPriceCents != null
+                  ? Number(marketPriceCents).toFixed(2)
+                  : ''
+                : Number.isFinite(limitPrice)
+                ? limitPrice
+                : ''
+            }
+            inputProps={{ min: 1, max: 99, step: 0.1 }}
+            onChange={(event) => {
+              if (isMarketOrder) return;
+              const next = Number(event.target.value);
+              setLimitPrice(
+                Number.isFinite(next) ? Math.min(99.9, Math.max(0.1, next)) : limitPrice,
+              );
+            }}
+            fullWidth
+            helperText={
+              isMarketOrder
+                ? 'Auto-tracks best available price.'
+                : 'Orders rest on the book until filled or cancelled.'
+            }
+          />
+        </Stack>
+
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
           <TextField
             label="Slippage (¢)"
-            variant="filled"
+            variant="outlined"
             size="small"
             fullWidth
             value={slippage}
@@ -254,7 +351,7 @@ export function TradeTicketPanel() {
           />
           <TextField
             label="Time-in-force (s)"
-            variant="filled"
+            variant="outlined"
             size="small"
             fullWidth
             value={timeInForce}
@@ -266,6 +363,18 @@ export function TradeTicketPanel() {
             }}
           />
         </Stack>
+
+        <Stack spacing={0.25}>
+          <Typography variant="caption" color="text.secondary">
+            Est. shares {estimatedShares > 0 ? estimatedShares.toFixed(2) : '––'} · Est. cost $
+            {estimatedCost > 0 ? estimatedCost.toFixed(2) : '0.00'}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Fill price {priceReady ? `${(effectivePriceCents as number).toFixed(2)}¢` : '––'} · Side{' '}
+            {side === 'BUY' ? 'Buy' : 'Sell'}
+          </Typography>
+        </Stack>
+
         <Button
           color="primary"
           variant="contained"
@@ -283,6 +392,7 @@ export function TradeTicketPanel() {
             'Execute Order'
           )}
         </Button>
+
         {showInsufficientFunds ? (
           <Alert severity="warning" variant="outlined">
             No funds detected in your Safe. Send Polygon USDC to{' '}

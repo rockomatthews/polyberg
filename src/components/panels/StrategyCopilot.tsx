@@ -72,6 +72,11 @@ export function StrategyCopilot() {
         marketId: match.conditionId,
         tokenId: match.primaryTokenId,
         question: match.question,
+        outcomeLabel:
+          match.primaryOutcome ??
+          match.outcomes?.find((outcome) => outcome.tokenId === match.primaryTokenId)?.label ??
+          match.outcomes?.[0]?.label ??
+          'Yes',
         openDepthOverlay: true,
       });
     }

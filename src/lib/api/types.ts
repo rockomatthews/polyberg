@@ -1,3 +1,9 @@
+export type MarketOutcome = {
+  tokenId: string | null;
+  label: string | null;
+  price: number | null;
+};
+
 export type Market = {
   conditionId: string;
   question: string;
@@ -13,6 +19,8 @@ export type Market = {
   bestAsk: number | null;
   spread: number | null;
   liquidity: number | null;
+  outcomes: MarketOutcome[];
+  category: 'sports' | 'entertainment' | 'crypto' | 'politics' | 'macro' | 'other';
 };
 
 export type OrderBookLevel = {

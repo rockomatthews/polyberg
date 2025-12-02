@@ -25,6 +25,75 @@ const tradeSchema = z.object({
 
 type SubmitPayload = z.infer<typeof tradeSchema>;
 
+type ClassifiedOrderError =
+  | {
+      code: 'INSUFFICIENT_FUNDS';
+      status: number;
+      message: string;
+      rawMessage: string;
+    }
+  | {
+      code: 'ORDER_REJECTED';
+      status: number;
+      message: string;
+      rawMessage: string;
+    };
+
+function extractOrderErrorMessage(error: unknown): string {
+  if (!error) {
+    return 'Unable to submit trade';
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'object' && error) {
+    const maybeResponse = (error as { response?: unknown }).response;
+    if (
+      maybeResponse &&
+      typeof maybeResponse === 'object' &&
+      'data' in maybeResponse &&
+      maybeResponse.data &&
+      typeof (maybeResponse as { data?: unknown }).data === 'object'
+    ) {
+      const data = (maybeResponse as { data?: { message?: unknown } }).data;
+      if (data && typeof data.message === 'string') {
+        return data.message;
+      }
+    }
+    if ('message' in error && typeof (error as { message?: unknown }).message === 'string') {
+      return (error as { message?: string }).message ?? 'Order rejected';
+    }
+  }
+  return 'Unable to submit trade';
+}
+
+function classifyOrderError(error: unknown): ClassifiedOrderError {
+  const rawMessage = extractOrderErrorMessage(error);
+  const normalized = rawMessage.toLowerCase();
+  const insufficient =
+    normalized.includes('insufficient') ||
+    normalized.includes('not enough') ||
+    normalized.includes('no funds') ||
+    normalized.includes('available balance');
+  if (insufficient) {
+    return {
+      code: 'INSUFFICIENT_FUNDS',
+      status: 402,
+      message: 'No funds detected in your Safe. Deposit Polygon USDC and retry.',
+      rawMessage,
+    };
+  }
+  return {
+    code: 'ORDER_REJECTED',
+    status: 400,
+    message: rawMessage || 'Order rejected by relayer',
+    rawMessage,
+  };
+}
+
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
@@ -148,21 +217,35 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(responsePayload);
   } catch (error) {
-    const message =
-      error instanceof z.ZodError
-        ? error.flatten()
-        : error instanceof Error
-          ? error.message
-          : 'Unable to submit trade';
+    if (error instanceof z.ZodError) {
+      logger.error('orders.submit.failed', {
+        error: error.flatten(),
+        payload: {
+          tokenId: parsedPayload?.tokenId,
+          side: parsedPayload?.side,
+          price: parsedPayload?.price,
+        },
+      });
+      return NextResponse.json({ error: error.flatten() }, { status: 400 });
+    }
+
+    const classified = classifyOrderError(error);
     logger.error('orders.submit.failed', {
-      error: error instanceof Error ? error.message : String(error),
+      error: classified.rawMessage,
+      code: classified.code,
       payload: {
         tokenId: parsedPayload?.tokenId,
         side: parsedPayload?.side,
         price: parsedPayload?.price,
       },
     });
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: classified.message,
+        code: classified.code,
+      },
+      { status: classified.status },
+    );
   }
 }
 

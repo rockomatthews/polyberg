@@ -24,6 +24,17 @@ const deriveMidPrice = (bid: number | null, ask: number | null) => {
   return 50;
 };
 
+type OrderMutationResponse = { success: boolean; order?: { orderID?: string } };
+type OrderMutationError = Error & { code?: string; status?: number };
+
+const getOrderErrorCode = (error: unknown): string | undefined => {
+  if (error && typeof error === 'object' && 'code' in error) {
+    const value = (error as { code?: unknown }).code;
+    return typeof value === 'string' ? value : undefined;
+  }
+  return undefined;
+};
+
 export function TradeTicketPanel() {
   const { data: markets } = useMarketsData();
   const selectedMarketId = useTerminalStore((state) => state.selectedMarketId);
@@ -69,15 +80,22 @@ export function TradeTicketPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const json = await response.json();
+      const json = (await response.json()) as
+        | (OrderMutationResponse & { error?: string; code?: string })
+        | { error?: string; code?: string };
       if (!response.ok || json.error) {
-        throw new Error(
+        const message =
           typeof json.error === 'string'
             ? json.error
-            : 'Order rejected by relayer. Check credentials.',
-        );
+            : 'Order rejected by relayer. Check credentials.';
+        const error = new Error(message) as OrderMutationError;
+        if ('code' in json && typeof json.code === 'string') {
+          error.code = json.code;
+        }
+        error.status = response.status;
+        throw error;
       }
-      return json as { success: boolean; order?: { orderID?: string } };
+      return json as OrderMutationResponse;
     },
   });
 
@@ -129,6 +147,8 @@ export function TradeTicketPanel() {
   const safeRequired = safeStatus?.requireSafe ?? false;
   const safeReady = safeStatus?.state === 'ready' || !safeRequired;
   const submitDisabled = !selectedTokenId || placeOrder.isPending || !safeReady;
+  const orderErrorCode = getOrderErrorCode(placeOrder.error);
+  const showInsufficientFunds = orderErrorCode === 'INSUFFICIENT_FUNDS';
 
   return (
     <PanelCard
@@ -257,17 +277,30 @@ export function TradeTicketPanel() {
           {placeOrder.isPending ? (
             <Stack direction="row" spacing={1} alignItems="center">
               <CircularProgress size={18} color="inherit" />
-              <span>Sending…</span>
+              <span>Executing…</span>
             </Stack>
           ) : (
-            'Arm Hotkey · Shift + Enter'
+            'Execute Order'
           )}
         </Button>
-        {placeOrder.isError && (
+        {showInsufficientFunds ? (
+          <Alert severity="warning" variant="outlined">
+            No funds detected in your Safe. Send Polygon USDC to{' '}
+            {safeStatus?.safeAddress ? (
+              <Typography component="span" variant="body2" fontWeight={600}>
+                {safeStatus.safeAddress}
+              </Typography>
+            ) : (
+              'your Safe address'
+            )}{' '}
+            and try again.
+          </Alert>
+        ) : null}
+        {placeOrder.isError && !showInsufficientFunds ? (
           <Alert severity="error" variant="outlined">
             {placeOrder.error instanceof Error ? placeOrder.error.message : 'Order failed'}
           </Alert>
-        )}
+        ) : null}
         {placeOrder.isSuccess && (
           <Alert severity="success" variant="outlined">
             Order sent to builder relayer{placeOrder.data?.order?.orderID ? (

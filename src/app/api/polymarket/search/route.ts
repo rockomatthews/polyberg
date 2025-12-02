@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { Market, MarketCategory } from '@/lib/api/types';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { loadMarketSnapshots } from '@/lib/polymarket/marketService';
 
 type GammaSearchMarket = {
   conditionId?: string;
@@ -53,6 +54,15 @@ export async function GET(request: NextRequest) {
       },
       cache: 'no-store',
     });
+    if (response.status === 401 || response.status === 403) {
+      logger.warn('search.gamma.unauthorized', { status: response.status });
+      const fallbackMarkets = await loadMarketSnapshots({
+        limit,
+        query,
+        mode: 'search',
+      });
+      return NextResponse.json({ markets: fallbackMarkets });
+    }
     if (!response.ok) {
       throw new Error(`Gamma search failed with ${response.status}`);
     }
@@ -69,7 +79,15 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error('search.gamma.failed', { error: message });
-    return NextResponse.json({ error: message, markets: [] }, { status: 502 });
+    const fallbackMarkets = await loadMarketSnapshots({
+      limit,
+      query,
+      mode: 'search',
+    });
+    return NextResponse.json(
+      { error: message, markets: fallbackMarkets },
+      { status: 200 },
+    );
   }
 }
 

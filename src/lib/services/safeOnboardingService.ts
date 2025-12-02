@@ -1,7 +1,5 @@
 import { Wallet } from '@ethersproject/wallet';
 
-import { Wallet } from '@ethersproject/wallet';
-
 import { redisClient } from '@/lib/redis';
 import { env, hasRelayer, requiresSafe } from '@/lib/env';
 import {

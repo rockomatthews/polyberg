@@ -8,6 +8,8 @@ import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import IconButton from '@mui/material/IconButton';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
 
 import { TerminalHeader } from './TerminalHeader';
@@ -19,6 +21,7 @@ import { BlotterPanel } from '../panels/BlotterPanel';
 import { AlertsPanel } from '../panels/AlertsPanel';
 import { ActivityPanel } from '../panels/ActivityPanel';
 import { StrategyCopilot } from '../panels/StrategyCopilot';
+import { TradeTicketPanel } from '../panels/TradeTicketPanel';
 import { useTerminalStore } from '@/state/useTerminalStore';
 
 export function AppShell() {
@@ -26,6 +29,7 @@ export function AppShell() {
   const [blotterOpen, setBlotterOpen] = React.useState(false);
   const depthOverlayOpen = useTerminalStore((state) => state.depthOverlayOpen);
   const setDepthOverlayOpen = useTerminalStore((state) => state.setDepthOverlayOpen);
+  const selectedMarketId = useTerminalStore((state) => state.selectedMarketId);
 
   return (
     <Box
@@ -136,26 +140,43 @@ export function AppShell() {
       </Dialog>
 
       <Dialog
-        open={depthOverlayOpen}
+        open={depthOverlayOpen && Boolean(selectedMarketId)}
         onClose={() => setDepthOverlayOpen(false)}
         fullWidth
         maxWidth="lg"
         PaperProps={{
           sx: {
-            backgroundColor: 'rgba(12, 14, 24, 0.92)',
+            backgroundColor: 'rgba(5, 8, 16, 0.92)',
           },
         }}
       >
         <DialogTitle
           sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'text.primary' }}
         >
-          Depth Ladder
+          Sniper Console
           <IconButton onClick={() => setDepthOverlayOpen(false)} size="small">
             <CloseIcon fontSize="small" />
           </IconButton>
         </DialogTitle>
         <DialogContent dividers sx={{ bgcolor: 'transparent' }}>
-          <DepthLadderPanel />
+          {selectedMarketId ? (
+            <Stack
+              direction={{ xs: 'column', md: 'row' }}
+              spacing={2}
+              sx={{ minWidth: { xs: '100%', md: '760px' } }}
+            >
+              <Box flex={1} minWidth={0}>
+                <TradeTicketPanel />
+              </Box>
+              <Box flex={1} minWidth={0}>
+                <DepthLadderPanel />
+              </Box>
+            </Stack>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              Select a market from the watchlist to load the sniper console.
+            </Typography>
+          )}
         </DialogContent>
       </Dialog>
 

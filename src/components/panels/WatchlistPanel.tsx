@@ -14,7 +14,6 @@ import StarOutlineIcon from '@mui/icons-material/StarOutline';
 import StarIcon from '@mui/icons-material/Star';
 
 import { PanelCard } from './PanelCard';
-import { TradeTicketPanel } from './TradeTicketPanel';
 import { useMarketsData } from '@/hooks/useTerminalData';
 import { useTerminalStore } from '@/state/useTerminalStore';
 import { useUserWatchlist } from '@/hooks/useWatchlist';
@@ -90,10 +89,8 @@ export function WatchlistPanel() {
   }, [favoritesOnly, sortedMarkets, watchlist, autoMarkets]);
 
   return (
-    <Stack spacing={2}>
-      <TradeTicketPanel />
-      <PanelCard title="Watchlist" subtitle="Markets">
-        <Stack spacing={1.5}>
+    <PanelCard title="Watchlist" subtitle="Markets">
+      <Stack spacing={1.5}>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
           <Typography variant="caption" color="text.secondary">
             {watchlist.length} favorites
@@ -227,7 +224,6 @@ export function WatchlistPanel() {
         Market data refreshed live via relayer feed.
       </Typography>
     </PanelCard>
-    </Stack>
   );
 }
 

@@ -86,7 +86,7 @@ function MarketSearchInput({ fullWidth }: MarketSearchInputProps) {
       marketId: first.conditionId,
       tokenId: first.primaryTokenId,
       question: first.question,
-      openDepthOverlay: false,
+      openDepthOverlay: true,
     });
     autoSelectedRef.current = { query: debounced, marketId: first.conditionId };
   }, [debounced, results, setSelection]);

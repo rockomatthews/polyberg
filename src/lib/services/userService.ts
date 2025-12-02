@@ -18,6 +18,7 @@ export type UserSafeRecord = {
   ownership_type: string;
   notes: string | null;
   metadata: Record<string, unknown> | null;
+  owner_private_key: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -78,6 +79,7 @@ async function ensureUserSafeTable() {
       ownership_type TEXT DEFAULT 'per-user',
       notes TEXT,
       metadata JSONB DEFAULT '{}'::jsonb,
+      owner_private_key TEXT,
       created_at TIMESTAMPTZ DEFAULT now(),
       updated_at TIMESTAMPTZ DEFAULT now()
     )
@@ -87,6 +89,7 @@ async function ensureUserSafeTable() {
   await db`ALTER TABLE user_safes ADD COLUMN IF NOT EXISTS ownership_type TEXT DEFAULT 'per-user'`;
   await db`ALTER TABLE user_safes ADD COLUMN IF NOT EXISTS notes TEXT`;
   await db`ALTER TABLE user_safes ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb`;
+  await db`ALTER TABLE user_safes ADD COLUMN IF NOT EXISTS owner_private_key TEXT`;
 }
 
 export async function getUserSafe(userId: string): Promise<UserSafeRecord | null> {
@@ -103,6 +106,7 @@ export async function getUserSafe(userId: string): Promise<UserSafeRecord | null
            ownership_type,
            notes,
            metadata,
+           owner_private_key,
            created_at,
            updated_at
     FROM user_safes
@@ -119,6 +123,7 @@ export type UpsertUserSafeInput = {
   ownershipType?: string | null;
   notes?: string | null;
   metadata?: Record<string, unknown> | null;
+  ownerPrivateKey?: string | null;
 };
 
 export async function upsertUserSafe(userId: string, input: UpsertUserSafeInput) {
@@ -135,7 +140,8 @@ export async function upsertUserSafe(userId: string, input: UpsertUserSafeInput)
       status,
       ownership_type,
       notes,
-      metadata
+      metadata,
+      owner_private_key
     )
     VALUES (
       ${userId},
@@ -144,7 +150,8 @@ export async function upsertUserSafe(userId: string, input: UpsertUserSafeInput)
       ${input.status ?? 'unknown'},
       ${input.ownershipType ?? 'per-user'},
       ${input.notes ?? null},
-      ${input.metadata ?? null}
+      ${input.metadata ?? null},
+      ${input.ownerPrivateKey ?? null}
     )
     ON CONFLICT (user_id)
     DO UPDATE
@@ -154,6 +161,7 @@ export async function upsertUserSafe(userId: string, input: UpsertUserSafeInput)
         ownership_type = COALESCE(EXCLUDED.ownership_type, user_safes.ownership_type),
         notes = COALESCE(EXCLUDED.notes, user_safes.notes),
         metadata = COALESCE(EXCLUDED.metadata, user_safes.metadata),
+        owner_private_key = COALESCE(EXCLUDED.owner_private_key, user_safes.owner_private_key),
         updated_at = now()
   `;
 }

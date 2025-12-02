@@ -1,9 +1,14 @@
+import { Wallet } from '@ethersproject/wallet';
+
+import { Wallet } from '@ethersproject/wallet';
+
 import { redisClient } from '@/lib/redis';
 import { env, hasRelayer, requiresSafe } from '@/lib/env';
 import {
-  ensureRelayClient,
   hasRelayClient,
   deriveOperatorSafeAddress,
+  createScopedRelayClient,
+  deriveSafeAddressFromPrivateKey,
 } from '@/lib/relayer/relayClient';
 import { getUserSafe, upsertUserSafe, type UserSafeRecord } from '@/lib/services/userService';
 import { logger } from '@/lib/logger';
@@ -69,7 +74,8 @@ export async function requestSafeDeployment(userId: string): Promise<SafeStatusP
     return status;
   }
 
-  const client = ensureRelayClient('deploy Safe');
+  const ownerPrivateKey = existing?.owner_private_key ?? Wallet.createRandom().privateKey;
+  const client = createScopedRelayClient(ownerPrivateKey);
   logger.info('safe.request.start', { userId });
   let relayerTx;
   let transactionID: string | null = null;
@@ -78,7 +84,7 @@ export async function requestSafeDeployment(userId: string): Promise<SafeStatusP
     transactionID = deployResponse.transactionID;
     relayerTx = await deployResponse.wait();
   } catch (error) {
-    const recovered = await recoverExistingSafe(userId, error);
+    const recovered = await recoverExistingSafe(userId, ownerPrivateKey, error);
     if (recovered) {
       await writeCache(userId, recovered);
       return recovered;
@@ -103,6 +109,7 @@ export async function requestSafeDeployment(userId: string): Promise<SafeStatusP
       taskId: transactionID,
       relayerUrl: env.relayerUrl ?? null,
     },
+    ownerPrivateKey,
   });
   const status = updated ? mapRecordToStatus(updated) : buildMissingStatus();
   await writeCache(userId, status);
@@ -227,6 +234,7 @@ async function storeSafeRecord(
     ownership_type: input.ownershipType ?? 'per-user',
     notes: input.notes ?? null,
     metadata: input.metadata ?? null,
+    owner_private_key: input.ownerPrivateKey ?? null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -243,12 +251,13 @@ async function storeSafeRecord(
   return record;
 }
 
-async function recoverExistingSafe(userId: string, error: unknown) {
+async function recoverExistingSafe(userId: string, ownerPrivateKey: string, error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   if (!message || !/safe already deployed/i.test(message)) {
     return null;
   }
-  const fallbackAddress = deriveOperatorSafeAddress();
+  const fallbackAddress =
+    deriveSafeAddressFromPrivateKey(ownerPrivateKey) ?? deriveOperatorSafeAddress();
   if (!fallbackAddress) {
     return null;
   }
@@ -264,6 +273,7 @@ async function recoverExistingSafe(userId: string, error: unknown) {
       source: 'relayer-existing',
       relayerUrl: env.relayerUrl ?? null,
     },
+    ownerPrivateKey,
   });
   return existing ? mapRecordToStatus(existing) : buildMissingStatus();
 }

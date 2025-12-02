@@ -18,13 +18,12 @@ import {
   getUserRecord,
   type UserRecord,
 } from '@/lib/services/userService';
-import { env, hasBuilderSigning, hasL2Auth, hasOrderSigner } from '@/lib/env';
+import { env } from '@/lib/env';
 import { SignOutButton } from '@/components/auth/SignOutButton';
 import {
   listCopilotEntries,
   type CopilotEntry,
 } from '@/lib/services/copilotService';
-import { CredentialPanel } from '@/components/profile/CredentialPanel';
 import { SafeSummary } from '@/components/profile/SafeSummary';
 import { StrategyAdminPanel } from '@/components/profile/StrategyAdminPanel';
 import { logger } from '@/lib/logger';
@@ -83,7 +82,7 @@ export default async function ProfilePage() {
             Profile
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Manage your Polymarket Snipes account, builder connectivity, and session details.
+            Manage your Polymarket Snipes account and session details.
           </Typography>
         </div>
 
@@ -109,16 +108,6 @@ export default async function ProfilePage() {
             <SafeSummary collateralAddress={env.collateralAddress} />
           </CardContent>
         </Card>
-
-        <div id="builder-credentials">
-          <CredentialPanel
-            providedByEnv={{
-              builderSigner: hasBuilderSigning,
-              l2Creds: hasL2Auth,
-              relayerSigner: hasOrderSigner,
-            }}
-          />
-        </div>
 
         <StrategyAdminPanel />
 

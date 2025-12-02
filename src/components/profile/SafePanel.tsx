@@ -93,6 +93,7 @@ export function SafePanel({
         ownership_type: 'per-user',
         notes: null,
         metadata: null,
+        owner_private_key: prev?.owner_private_key ?? null,
         created_at: prev?.created_at ?? new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }));

@@ -64,6 +64,7 @@ export function WatchlistPanel() {
   const { data, isFetching } = useMarketsData();
   const markets = React.useMemo(() => data ?? [], [data]);
   const selectedMarketId = useTerminalStore((state) => state.selectedMarketId);
+  const selectedTokenId = useTerminalStore((state) => state.selectedTokenId);
   const setSelection = useTerminalStore((state) => state.setSelection);
   const { watchlist, toggleWatchlist, isError } = useUserWatchlist();
   const [favoritesOnly, setFavoritesOnly] = React.useState(false);

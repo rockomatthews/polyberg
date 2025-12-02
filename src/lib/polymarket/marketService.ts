@@ -445,10 +445,10 @@ async function fetchGammaSportsMarkets(
     return [];
   }
   try {
-    const url = new URL('/markets', env.gammaApiHost);
-    url.searchParams.set('limit', String(Math.min(needed * 3, 300)));
-    url.searchParams.set('tag', 'sports');
-    url.searchParams.set('status', 'active');
+    const url = new URL('/public-search', env.gammaApiHost);
+    url.searchParams.set('q', 'sports');
+    url.searchParams.set('events_tag', 'sports');
+    url.searchParams.set('limit_per_type', String(Math.min(needed * 5, 250)));
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'polyberg-sports-fetch/1.0',
@@ -458,8 +458,13 @@ async function fetchGammaSportsMarkets(
     if (!response.ok) {
       throw new Error(`Gamma markets request failed with ${response.status}`);
     }
-    const payload = (await response.json()) as { data?: GammaMarket[] } | GammaMarket[];
-    const markets = Array.isArray(payload) ? payload : payload.data ?? [];
+    const payload = (await response.json()) as {
+      events?: Array<{ markets?: GammaMarket[] }>;
+    };
+    const markets =
+      payload.events
+        ?.flatMap((event) => event.markets ?? [])
+        .filter((market): market is GammaMarket => Boolean(market)) ?? [];
     const normalized: ClobMarket[] = [];
     for (const market of markets) {
       const conditionId =

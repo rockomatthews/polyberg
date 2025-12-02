@@ -18,7 +18,7 @@ import { PanelCard } from './PanelCard';
 import { useMarketsData } from '@/hooks/useTerminalData';
 import { useTerminalStore } from '@/state/useTerminalStore';
 import { useUserWatchlist } from '@/hooks/useWatchlist';
-import type { Market } from '@/lib/api/types';
+import type { Market, MarketCategory } from '@/lib/api/types';
 
 type OutcomeButtonTone = 'yes' | 'no' | 'neutral' | 'team-a' | 'team-b';
 
@@ -381,7 +381,7 @@ function resolveOutcomePalette(tone: OutcomeButtonTone, active: boolean) {
   return palettes[tone];
 }
 
-function getMarketCategory(market: Market) {
+function getMarketCategory(market: Market): MarketCategory {
   return market.category ?? deriveCategory(market);
 }
 
@@ -488,7 +488,7 @@ function shuffle<T>(input: T[]): T[] {
   return arr;
 }
 
-function deriveCategory(market: Market) {
+function deriveCategory(market: Market): MarketCategory {
   if (market.category) {
     return market.category;
   }

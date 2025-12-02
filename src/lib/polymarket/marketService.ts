@@ -1,4 +1,4 @@
-import type { Market } from '@/lib/api/types';
+import type { Market, MarketCategory } from '@/lib/api/types';
 import { clobClient } from '@/lib/polymarket/clobClient';
 import { logger } from '@/lib/logger';
 import { env } from '@/lib/env';
@@ -77,7 +77,7 @@ export async function loadMarketSnapshots(
 async function hydrateMarkets(markets: ClobMarket[]): Promise<Market[]> {
   return Promise.all(
     markets.map(async (market) => {
-      const category = resolveCategory(market);
+      const category: MarketCategory = resolveCategory(market);
       const outcomes =
         market.tokens
           ?.slice(0, 3)
@@ -275,7 +275,7 @@ function pickFeaturedMarkets(markets: ClobMarket[], limit: number, now: number) 
   return selected.slice(0, limit);
 }
 
-function resolveCategory(market: ClobMarket): string {
+function resolveCategory(market: ClobMarket): MarketCategory {
   const tags = (market.tags ?? []).map((tag) => tag.toLowerCase());
   const question = market.question?.toLowerCase() ?? '';
   if (

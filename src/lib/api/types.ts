@@ -1,3 +1,11 @@
+export type MarketCategory =
+  | 'sports'
+  | 'entertainment'
+  | 'crypto'
+  | 'politics'
+  | 'macro'
+  | 'other';
+
 export type MarketOutcome = {
   tokenId: string | null;
   label: string | null;
@@ -20,7 +28,7 @@ export type Market = {
   spread: number | null;
   liquidity: number | null;
   outcomes: MarketOutcome[];
-  category: 'sports' | 'entertainment' | 'crypto' | 'politics' | 'macro' | 'other';
+  category: MarketCategory;
 };
 
 export type OrderBookLevel = {

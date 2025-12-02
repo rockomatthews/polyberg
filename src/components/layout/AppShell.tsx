@@ -20,7 +20,6 @@ import { PositionsPanel } from '../panels/PositionsPanel';
 import { BlotterPanel } from '../panels/BlotterPanel';
 import { AlertsPanel } from '../panels/AlertsPanel';
 import { ActivityPanel } from '../panels/ActivityPanel';
-import { StrategyCopilot } from '../panels/StrategyCopilot';
 import { TradeTicketPanel } from '../panels/TradeTicketPanel';
 import { useTerminalStore } from '@/state/useTerminalStore';
 
@@ -81,9 +80,8 @@ export function AppShell() {
         <Box sx={{ gridArea: 'alerts' }}>
           <AlertsPanel />
         </Box>
-        <Box sx={{ gridArea: 'activity', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box sx={{ gridArea: 'activity' }}>
           <ActivityPanel />
-          <StrategyCopilot />
         </Box>
       </Box>
       <Divider sx={{ opacity: 0.08 }} />

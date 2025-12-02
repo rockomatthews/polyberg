@@ -11,6 +11,13 @@ import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Box from '@mui/material/Box';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import CloseIcon from '@mui/icons-material/Close';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import CircularProgress from '@mui/material/CircularProgress';
 import StarOutlineIcon from '@mui/icons-material/StarOutline';
 import StarIcon from '@mui/icons-material/Star';
 
@@ -27,6 +34,15 @@ type OutcomeButtonOption = {
   tokenId: string | null;
   price: number | null;
   tone: OutcomeButtonTone;
+};
+
+type MarketInsight = {
+  headline: string;
+  probability: string;
+  lean: string;
+  rationale: string;
+  catalysts: string[];
+  risks: string[];
 };
 
 const YES_KEYWORDS = ['yes', 'up', 'over', 'higher', 'will', 'pass'];
@@ -90,12 +106,54 @@ export function WatchlistPanel() {
     React.useState<(typeof CATEGORY_FILTERS)[number]['id']>('all');
   const [sportsLeagueFilter, setSportsLeagueFilter] =
     React.useState<SportsLeagueFilter>('all');
+  const [insightOpen, setInsightOpen] = React.useState(false);
+  const [insightMarket, setInsightMarket] = React.useState<Market | null>(null);
+  const [insightLoading, setInsightLoading] = React.useState(false);
+  const [insightError, setInsightError] = React.useState<string | null>(null);
+  const [insightData, setInsightData] = React.useState<MarketInsight | null>(null);
+  const closeInsight = React.useCallback(() => {
+    setInsightOpen(false);
+  }, []);
 
   React.useEffect(() => {
     if (categoryFilter !== 'sports') {
       setSportsLeagueFilter('all');
     }
   }, [categoryFilter]);
+
+  const openInsight = React.useCallback(async (market: Market) => {
+    setInsightMarket(market);
+    setInsightOpen(true);
+    setInsightLoading(true);
+    setInsightError(null);
+    setInsightData(null);
+    try {
+      const response = await fetch('/api/ai/market-insight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          market: {
+            question: market.question,
+            tag: market.tag,
+            category: getMarketCategory(market),
+            bestBid: market.bestBid,
+            bestAsk: market.bestAsk,
+            liquidity: market.liquidity,
+            endDate: market.endDate,
+          },
+        }),
+      });
+      const json = await response.json();
+      if (!response.ok || !json.insight) {
+        throw new Error(json.error || 'AI insight unavailable');
+      }
+      setInsightData(json.insight as MarketInsight);
+    } catch (error) {
+      setInsightError(error instanceof Error ? error.message : 'AI insight unavailable');
+    } finally {
+      setInsightLoading(false);
+    }
+  }, []);
 
   const defaultMarket = React.useMemo(
     () => markets.find((market) => market.primaryTokenId),
@@ -292,6 +350,17 @@ export function WatchlistPanel() {
                         {market.tag || 'General'}
                       </Typography>
                     </Stack>
+                    <Tooltip title="AI market insight">
+                      <IconButton
+                        size="small"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openInsight(market);
+                        }}
+                      >
+                        <InfoOutlinedIcon fontSize="inherit" />
+                      </IconButton>
+                    </Tooltip>
                     <Tooltip title={isFavorite ? 'Remove from watchlist' : 'Add to watchlist'}>
                       <IconButton
                         size="small"
@@ -363,6 +432,78 @@ export function WatchlistPanel() {
       <Typography variant="caption" color="text.secondary">
         Market data refreshed live via relayer feed.
       </Typography>
+      <Dialog open={insightOpen} onClose={closeInsight} fullWidth maxWidth="sm">
+        <DialogTitle
+          sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pr: 1 }}
+        >
+          {insightMarket?.question ?? 'AI Insight'}
+          <IconButton size="small" onClick={closeInsight}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers>
+          {insightLoading ? (
+            <Stack alignItems="center" spacing={2} py={2}>
+              <CircularProgress size={24} />
+              <Typography variant="body2" color="text.secondary">
+                Asking the models for fresh intel…
+              </Typography>
+            </Stack>
+          ) : insightError ? (
+            <Alert severity="error" variant="outlined">
+              {insightError}
+            </Alert>
+          ) : insightData ? (
+            <Stack spacing={1.5}>
+              <Typography variant="subtitle2" color="text.secondary">
+                {insightData.headline}
+              </Typography>
+              <Typography variant="h5">{insightData.probability}</Typography>
+              <Typography variant="body2" fontWeight={600}>
+                {insightData.lean}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {insightData.rationale}
+              </Typography>
+              {insightData.catalysts.length ? (
+                <Stack spacing={0.5}>
+                  <Typography variant="caption" color="text.secondary">
+                    Catalysts to watch
+                  </Typography>
+                  <Box component="ul" sx={{ pl: 3, m: 0 }}>
+                    {insightData.catalysts.map((item) => (
+                      <Typography key={item} component="li" variant="body2">
+                        {item}
+                      </Typography>
+                    ))}
+                  </Box>
+                </Stack>
+              ) : null}
+              {insightData.risks.length ? (
+                <Stack spacing={0.5}>
+                  <Typography variant="caption" color="text.secondary">
+                    Risks to monitor
+                  </Typography>
+                  <Box component="ul" sx={{ pl: 3, m: 0 }}>
+                    {insightData.risks.map((item) => (
+                      <Typography key={item} component="li" variant="body2">
+                        {item}
+                      </Typography>
+                    ))}
+                  </Box>
+                </Stack>
+              ) : null}
+            </Stack>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              Pick a market to get instant AI commentary.
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeInsight}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </PanelCard>
   );
 }

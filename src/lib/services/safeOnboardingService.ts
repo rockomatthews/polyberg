@@ -66,7 +66,7 @@ export async function requestSafeDeployment(userId: string): Promise<SafeStatusP
   }
 
   const existing = await readSafeRecord(userId);
-  if (existing?.safe_address) {
+  if (existing?.safe_address && existing.owner_private_key) {
     const status = mapRecordToStatus(existing);
     await writeCache(userId, status);
     return status;

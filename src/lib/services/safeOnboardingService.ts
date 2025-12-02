@@ -151,10 +151,30 @@ function mapRecordToStatus(record: UserSafeRecord): SafeStatusPayload {
 function normalizeState(status?: string | null): SafeStatusState {
   if (!status) return 'missing';
   const value = status.toLowerCase();
-  if (['deployed', 'success', 'ready'].includes(value)) {
+  if (
+    [
+      'deployed',
+      'success',
+      'ready',
+      'state_mined',
+      'state_executed',
+      'state_confirmed',
+      'state_finalized',
+    ].includes(value)
+  ) {
     return 'ready';
   }
-  if (['pending', 'queued', 'deploying'].includes(value)) {
+  if (
+    [
+      'pending',
+      'queued',
+      'deploying',
+      'state_submitted',
+      'state_processing',
+      'state_broadcasted',
+      'state_pending',
+    ].includes(value)
+  ) {
     return 'pending';
   }
   if (['failed', 'error', 'reverted'].includes(value)) {

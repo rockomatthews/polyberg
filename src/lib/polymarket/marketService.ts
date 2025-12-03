@@ -540,11 +540,11 @@ function normalizeGammaTokens(market: GammaMarket): ClobToken[] {
 
 function convertPriceToCents(value?: number | string | null) {
   if (value == null) {
-    return null;
+    return undefined;
   }
   const numeric = typeof value === 'string' ? Number(value) : value;
   if (!Number.isFinite(numeric)) {
-    return null;
+    return undefined;
   }
   return Number((numeric * 100).toFixed(2));
 }

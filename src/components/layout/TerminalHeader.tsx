@@ -36,7 +36,7 @@ function MarketSearchInput({ fullWidth }: MarketSearchInputProps) {
   const [focused, setFocused] = React.useState(false);
   const [debounced, setDebounced] = React.useState('');
   const setSelection = useTerminalStore((state) => state.setSelection);
-  const autoSelectedRef = React.useRef<{ query: string; marketId: string } | null>(null);
+  const router = useRouter();
 
   React.useEffect(() => {
     const id = setTimeout(() => {
@@ -53,6 +53,16 @@ function MarketSearchInput({ fullWidth }: MarketSearchInputProps) {
 
   const handleSelect = (market: Market) => {
     if (!market.primaryTokenId) return;
+    const slug = market.slug ?? market.conditionId;
+    const isSports =
+      market.category === 'sports' ||
+      (market.tag ? market.tag.toLowerCase().includes('sports') : false);
+    if (isSports && slug) {
+      router.push(`/sports/${encodeURIComponent(slug)}`);
+      setValue('');
+      setFocused(false);
+      return;
+    }
     setSelection({
       marketId: market.conditionId,
       tokenId: market.primaryTokenId,
@@ -70,36 +80,6 @@ function MarketSearchInput({ fullWidth }: MarketSearchInputProps) {
 
   const showDropdown =
     focused && (debounced.length >= 2 || value.length >= 2) && (isFetching || results.length > 0);
-
-  React.useEffect(() => {
-    if (debounced.length < 2 || results.length === 0) {
-      return;
-    }
-    const first = results[0];
-    if (!first?.primaryTokenId) {
-      return;
-    }
-    const lastSelection = autoSelectedRef.current;
-    if (
-      lastSelection &&
-      lastSelection.query === debounced &&
-      lastSelection.marketId === first.conditionId
-    ) {
-      return;
-    }
-    setSelection({
-      marketId: first.conditionId,
-      tokenId: first.primaryTokenId,
-      question: first.question,
-      outcomeLabel:
-        first.primaryOutcome ??
-        first.outcomes?.[0]?.label ??
-        'Yes',
-      openDepthOverlay: true,
-      market: first,
-    });
-    autoSelectedRef.current = { query: debounced, marketId: first.conditionId };
-  }, [debounced, results, setSelection]);
 
   return (
     <Stack

@@ -35,12 +35,14 @@ type ClobMarket = {
   }>;
 };
 
-type GammaMarket = {
+export type GammaTag = string | { label?: string; slug?: string };
+
+export type GammaMarket = {
   conditionId?: string;
   slug?: string;
   question?: string;
-  tags?: string[];
-  categories?: string[];
+  tags?: GammaTag[];
+  categories?: GammaTag[];
   startDate?: string;
   endDate?: string;
   closeDate?: string;
@@ -67,6 +69,15 @@ type GammaMarket = {
   outcomePrices?: Array<number | string> | string;
   clobTokenIds?: string | string[];
   liquidity?: number | string | null;
+  sportsMarketType?: string;
+  marketType?: string;
+  market_type?: string;
+  line?: number | string | null;
+  homeTeamName?: string;
+  awayTeamName?: string;
+  home_team_name?: string;
+  away_team_name?: string;
+  image?: string | null;
 };
 
 type SamplingPayload = {
@@ -473,47 +484,11 @@ async function fetchGammaSportsMarkets(
         .filter((market): market is GammaMarket => Boolean(market)) ?? [];
     const normalized: ClobMarket[] = [];
     for (const market of markets) {
-      const conditionId =
-        market.conditionId ??
-        (market as { condition_id?: string }).condition_id ??
-        (market as { id?: string }).id ??
-        market.slug ??
-        '';
-      if (!conditionId || existingIds.has(conditionId)) {
+      const mapped = mapGammaMarketToClobMarket(market);
+      if (!mapped || existingIds.has(mapped.condition_id)) {
         continue;
       }
-
-      const parsedTokens = normalizeGammaTokens(market);
-
-      normalized.push({
-        question: market.question ?? '',
-        market_slug: market.slug ?? conditionId,
-        tags: market.tags ?? market.categories ?? ['sports'],
-        tokens: parsedTokens,
-        enable_order_book: true,
-        active: true,
-        condition_id: conditionId,
-        icon: null,
-        image: null,
-        end_date_iso: market.endDate ?? market.closeDate ?? null,
-        endDate: market.endDate ?? market.closeDate ?? null,
-        createdAt: market.createdAt ?? null,
-        updatedAt: market.updatedAt ?? null,
-        startDate: market.startDate ?? null,
-        liquidity:
-          typeof market.liquidity === 'string'
-            ? Number(market.liquidity)
-            : market.liquidity ?? null,
-        liquidityNum:
-          typeof market.liquidity === 'string'
-            ? Number(market.liquidity)
-            : (market.liquidity as number | null | undefined) ?? null,
-        events: [],
-        archived: false,
-        accepting_orders: true,
-        closed: false,
-      });
-
+      normalized.push(mapped);
       if (normalized.length >= needed) {
         break;
       }
@@ -534,14 +509,7 @@ function normalizeGammaTokens(market: GammaMarket): ClobToken[] {
       .map((token) => ({
         token_id: token.token_id ?? token.tokenId ?? token.id ?? undefined,
         outcome: token.outcome ?? undefined,
-        price:
-          token.price != null
-            ? typeof token.price === 'string'
-              ? Number(token.price)
-              : token.price
-            : token.priceCents != null
-              ? Number(token.priceCents) / 100
-              : undefined,
+        price: convertPriceToCents(token.price ?? token.priceCents ?? null),
       }));
   }
 
@@ -566,8 +534,19 @@ function normalizeGammaTokens(market: GammaMarket): ClobToken[] {
   return clobTokenIds.map((tokenId, index) => ({
     token_id: tokenId ?? undefined,
     outcome: outcomeLabels[index] ?? undefined,
-    price: outcomePrices[index],
+    price: convertPriceToCents(outcomePrices[index] ?? null),
   }));
+}
+
+function convertPriceToCents(value?: number | string | null) {
+  if (value == null) {
+    return null;
+  }
+  const numeric = typeof value === 'string' ? Number(value) : value;
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+  return Number((numeric * 100).toFixed(2));
 }
 
 function parseJsonArray<T>(value?: string | null): T[] | null {
@@ -615,6 +594,82 @@ function parsePriceArray(value?: Array<number | string> | string | null) {
   }
   const parsed = parseJsonArray<number | string>(value);
   return parsed?.map((item) => normalize(item)) ?? null;
+}
+
+function normalizeTagStrings(values?: GammaTag[]): string[] {
+  if (!values?.length) {
+    return [];
+  }
+  return values
+    .map((tag) => {
+      if (typeof tag === 'string') return tag;
+      if (tag && typeof tag === 'object') {
+        return tag.label ?? tag.slug ?? '';
+      }
+      return '';
+    })
+    .filter(Boolean);
+}
+
+function mapGammaMarketToClobMarket(market: GammaMarket): ClobMarket | null {
+  const conditionId =
+    market.conditionId ??
+    (market as { condition_id?: string }).condition_id ??
+    (market as { id?: string }).id ??
+    market.slug ??
+    '';
+  if (!conditionId) {
+    return null;
+  }
+  const parsedTokens = normalizeGammaTokens(market);
+  const normalizedTags = [
+    ...normalizeTagStrings(market.tags),
+    ...normalizeTagStrings(market.categories),
+  ].filter(Boolean);
+
+  return {
+    question: market.question ?? '',
+    market_slug: market.slug ?? conditionId,
+    tags: normalizedTags.length ? normalizedTags : ['Sports'],
+    tokens: parsedTokens,
+    enable_order_book: true,
+    active: true,
+    condition_id: conditionId,
+    icon: market.image ?? null,
+    image: market.image ?? null,
+    end_date_iso: market.endDate ?? market.closeDate ?? null,
+    endDate: market.endDate ?? market.closeDate ?? null,
+    createdAt: market.createdAt ?? null,
+    updatedAt: market.updatedAt ?? null,
+    startDate: market.startDate ?? null,
+    liquidity:
+      typeof market.liquidity === 'string' ? Number(market.liquidity) : market.liquidity ?? null,
+    liquidityNum:
+      typeof market.liquidity === 'string'
+        ? Number(market.liquidity)
+        : (market.liquidity as number | null | undefined) ?? null,
+    events: [],
+    archived: false,
+    accepting_orders: true,
+    closed: false,
+  };
+}
+
+export async function convertGammaMarketsToMarkets(
+  markets: GammaMarket[],
+): Promise<Array<{ source: GammaMarket; market: Market }>> {
+  const pairs: Array<{ source: GammaMarket; clob: ClobMarket }> = [];
+  for (const market of markets) {
+    const mapped = mapGammaMarketToClobMarket(market);
+    if (mapped) {
+      pairs.push({ source: market, clob: mapped });
+    }
+  }
+  if (!pairs.length) {
+    return [];
+  }
+  const hydrated = await hydrateMarkets(pairs.map((pair) => pair.clob));
+  return hydrated.map((market, index) => ({ source: pairs[index].source, market }));
 }
 
 

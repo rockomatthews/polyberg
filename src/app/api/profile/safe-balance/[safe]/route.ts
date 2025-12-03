@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server';
 
+export const runtime = 'nodejs';
+
 import { handleSafeBalance } from '../route';
 
 type Params = { safe: string };

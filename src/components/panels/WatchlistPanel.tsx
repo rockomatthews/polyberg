@@ -11,7 +11,6 @@ import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Box from '@mui/material/Box';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -380,8 +379,17 @@ export function WatchlistPanel() {
                           event.stopPropagation();
                           openInsight(market);
                         }}
+                        sx={{
+                          border: '1px solid rgba(79,195,247,0.6)',
+                          borderRadius: 1,
+                          fontSize: '0.65rem',
+                          fontWeight: 700,
+                          width: 28,
+                          height: 28,
+                          color: 'rgb(79,195,247)',
+                        }}
                       >
-                        <InfoOutlinedIcon fontSize="inherit" />
+                        AI
                       </IconButton>
                     </Tooltip>
                 <Tooltip title={isFavorite ? 'Remove from watchlist' : 'Add to watchlist'}>

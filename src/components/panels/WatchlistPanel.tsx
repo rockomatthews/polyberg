@@ -326,19 +326,19 @@ export function WatchlistPanel() {
             }}
           >
             {filteredMarkets.map((market) => {
-              const isActive = market.conditionId === selectedMarketId;
+            const isActive = market.conditionId === selectedMarketId;
               const spreadLabel = formatSpread(market.spread);
-              const isFavorite = watchlist.includes(market.conditionId);
+            const isFavorite = watchlist.includes(market.conditionId);
               const category = getMarketCategory(market);
               const outcomeOptions = buildOutcomeOptions(market);
-              return (
-                <Stack
-                  key={market.conditionId}
-                  spacing={1}
-                  onClick={() =>
-                    setSelection({
-                      marketId: market.conditionId,
-                      tokenId: market.primaryTokenId,
+            return (
+              <Stack
+                key={market.conditionId}
+                spacing={1}
+                onClick={() =>
+                  setSelection({
+                    marketId: market.conditionId,
+                    tokenId: market.primaryTokenId,
                       question: market.question,
                       outcomeLabel:
                         market.primaryOutcome ??
@@ -346,16 +346,16 @@ export function WatchlistPanel() {
                         'Yes',
                       openDepthOverlay: true,
                       market,
-                    })
-                  }
-                  sx={{
+                  })
+                }
+                sx={{
                     p: 1.25,
                     borderRadius: 1.2,
-                    bgcolor: isActive ? 'rgba(77,208,225,0.08)' : 'rgba(255,255,255,0.02)',
-                    border: `1px solid ${
-                      isActive ? 'rgba(77,208,225,0.4)' : 'rgba(255,255,255,0.04)'
-                    }`,
-                    cursor: 'pointer',
+                  bgcolor: isActive ? 'rgba(77,208,225,0.08)' : 'rgba(255,255,255,0.02)',
+                  border: `1px solid ${
+                    isActive ? 'rgba(77,208,225,0.4)' : 'rgba(255,255,255,0.04)'
+                  }`,
+                  cursor: 'pointer',
                     minHeight: 140,
                     transition: 'border-color 120ms ease, transform 120ms ease',
                     '&:hover': {
@@ -368,11 +368,11 @@ export function WatchlistPanel() {
                     <Stack flex={1} spacing={0.5}>
                       <Typography variant="subtitle2" sx={{ minHeight: 48 }}>
                         {market.question}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
                         {market.tag || 'General'}
-                      </Typography>
-                    </Stack>
+                  </Typography>
+                </Stack>
                     <Tooltip title="AI market insight">
                       <IconButton
                         size="small"
@@ -384,21 +384,21 @@ export function WatchlistPanel() {
                         <InfoOutlinedIcon fontSize="inherit" />
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title={isFavorite ? 'Remove from watchlist' : 'Add to watchlist'}>
-                      <IconButton
-                        size="small"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          toggleWatchlist(market.conditionId, !isFavorite);
-                        }}
-                      >
-                        {isFavorite ? (
-                          <StarIcon fontSize="small" color="warning" />
-                        ) : (
-                          <StarOutlineIcon fontSize="small" />
-                        )}
-                      </IconButton>
-                    </Tooltip>
+                <Tooltip title={isFavorite ? 'Remove from watchlist' : 'Add to watchlist'}>
+                  <IconButton
+                    size="small"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleWatchlist(market.conditionId, !isFavorite);
+                    }}
+                  >
+                    {isFavorite ? (
+                      <StarIcon fontSize="small" color="warning" />
+                    ) : (
+                      <StarOutlineIcon fontSize="small" />
+                    )}
+                  </IconButton>
+                </Tooltip>
                   </Stack>
                   <Typography variant="caption" color="text.secondary">
                     {category.charAt(0).toUpperCase() + category.slice(1)} • Ends in{' '}
@@ -432,8 +432,8 @@ export function WatchlistPanel() {
                       Liquidity {formatLiquidity(market.liquidity)}
                     </Typography>
                   </Stack>
-                </Stack>
-              );
+              </Stack>
+            );
             })}
           </Box>
         )}
@@ -509,15 +509,15 @@ export function WatchlistPanel() {
                       <Typography key={item} component="li" variant="body2">
                         {item}
                       </Typography>
-                    ))}
+            ))}
                   </Box>
-                </Stack>
-              ) : null}
-            </Stack>
+          </Stack>
+        ) : null}
+      </Stack>
           ) : (
             <Typography variant="body2" color="text.secondary">
               Pick a market to get instant AI commentary.
-            </Typography>
+      </Typography>
           )}
         </DialogContent>
         <DialogActions>

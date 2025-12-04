@@ -40,34 +40,65 @@ type ClassifiedOrderError =
     };
 
 function extractOrderErrorMessage(error: unknown): string {
+  const fallthrough = 'Unable to submit trade';
   if (!error) {
-    return 'Unable to submit trade';
+    return fallthrough;
   }
   if (typeof error === 'string') {
     return error;
   }
   if (error instanceof Error) {
-    return error.message;
+    return error.message || fallthrough;
   }
   if (typeof error === 'object' && error) {
     const maybeResponse = (error as { response?: unknown }).response;
-    if (
-      maybeResponse &&
-      typeof maybeResponse === 'object' &&
-      'data' in maybeResponse &&
-      maybeResponse.data &&
-      typeof (maybeResponse as { data?: unknown }).data === 'object'
-    ) {
-      const data = (maybeResponse as { data?: { message?: unknown } }).data;
-      if (data && typeof data.message === 'string') {
-        return data.message;
+    if (maybeResponse && typeof maybeResponse === 'object') {
+      const data = (maybeResponse as { data?: unknown }).data;
+      const extracted = extractMessageFromData(data);
+      if (extracted) {
+        return extracted;
       }
     }
     if ('message' in error && typeof (error as { message?: unknown }).message === 'string') {
-      return (error as { message?: string }).message ?? 'Order rejected';
+      return (error as { message?: string }).message ?? fallthrough;
     }
   }
-  return 'Unable to submit trade';
+  return fallthrough;
+}
+
+function extractMessageFromData(data: unknown): string | undefined {
+  if (!data) {
+    return undefined;
+  }
+  if (typeof data === 'string') {
+    return data;
+  }
+  if (typeof data !== 'object') {
+    return undefined;
+  }
+  const fields = ['message', 'error', 'detail', 'description'] as const;
+  for (const field of fields) {
+    const value = (data as Record<string, unknown>)[field];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value;
+    }
+  }
+  if (Array.isArray((data as { errors?: unknown }).errors)) {
+    const first = ((data as { errors?: unknown }).errors as Array<unknown>).find(Boolean);
+    if (first && typeof first === 'object') {
+      const nested = extractMessageFromData(first);
+      if (nested) {
+        return nested;
+      }
+    } else if (typeof first === 'string') {
+      return first;
+    }
+  }
+  try {
+    return JSON.stringify(data);
+  } catch {
+    return undefined;
+  }
 }
 
 function classifyOrderError(error: unknown): ClassifiedOrderError {

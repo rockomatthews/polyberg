@@ -12,6 +12,9 @@ import {
   SafeNotReadyError,
 } from '@/lib/services/safeTradingGate';
 
+const MIN_PRICE = 0.001;
+const MAX_PRICE = 0.999;
+
 const tradeSchema = z.object({
   tokenId: z.string().min(1),
   side: z.nativeEnum(Side),
@@ -208,7 +211,9 @@ export async function POST(request: NextRequest) {
     const json = await request.json();
     parsedPayload = tradeSchema.parse(json);
 
-    const limitPrice = parsedPayload.price / 100;
+    const priceDecimal = parsedPayload.price / 100;
+    const normalizedPrice = Math.min(Math.max(priceDecimal, MIN_PRICE), MAX_PRICE);
+    const limitPrice = Number(normalizedPrice.toFixed(3)); // clamp float noise before relayer call
     const sizeInContracts = parsedPayload.size * 1_000; // slider is expressed in "k"
     const deferExec = parsedPayload.executionMode === 'passive';
 

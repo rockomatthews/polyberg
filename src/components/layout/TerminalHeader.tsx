@@ -75,7 +75,6 @@ function MarketSearchInput({ fullWidth }: MarketSearchInputProps) {
   });
 
   const handleSelect = (market: Market) => {
-    if (!market.primaryTokenId) return;
     const slug = market.slug ?? market.conditionId;
     const haystacks = [
       market.category ?? '',
@@ -94,9 +93,17 @@ function MarketSearchInput({ fullWidth }: MarketSearchInputProps) {
       setFocused(false);
       return;
     }
+    const resolvedTokenId =
+      market.primaryTokenId ??
+      market.outcomes?.find((outcome) => outcome.tokenId)?.tokenId ??
+      null;
+    if (!resolvedTokenId) {
+      console.warn('No tradable token for market selection', { marketId: market.conditionId });
+      return;
+    }
     setSelection({
       marketId: market.conditionId,
-      tokenId: market.primaryTokenId,
+      tokenId: resolvedTokenId,
       question: market.question,
       outcomeLabel:
         market.primaryOutcome ??

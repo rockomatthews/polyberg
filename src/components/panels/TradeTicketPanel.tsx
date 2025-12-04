@@ -16,7 +16,7 @@ import { useMarketsData, useOrderBookData } from '@/hooks/useTerminalData';
 import { useTerminalStore } from '@/state/useTerminalStore';
 import { useSafeStatus } from '@/hooks/useSafeStatus';
 import { useSafeBalance } from '@/hooks/useSafeBalance';
-import { estimateOrderCollateral, COLLATERAL_TOLERANCE } from '@/lib/trading/collateral';
+import { estimateOrderCollateral } from '@/lib/trading/collateral';
 
 const deriveMidPrice = (bid: number | null, ask: number | null) => {
   if (bid != null && ask != null) return (bid + ask) / 2;
@@ -78,7 +78,7 @@ export function TradeTicketPanel() {
       : activeMarket?.bestAsk ?? null;
 
   const derivedMid = deriveMidPrice(bestBid, bestAsk);
-  const [amountUsd, setAmountUsd] = React.useState(100);
+  const [amountUsd, setAmountUsd] = React.useState(0);
   const [limitPrice, setLimitPrice] = React.useState(derivedMid);
   const [side, setSide] = React.useState<'BUY' | 'SELL'>('BUY');
   const [slippage, setSlippage] = React.useState(2);
@@ -162,7 +162,7 @@ export function TradeTicketPanel() {
       : bestBid ?? derivedMid;
   const effectivePriceCents = isMarketOrder ? marketPriceCents : limitPrice;
   const priceReady = effectivePriceCents != null && effectivePriceCents > 0;
-  const normalizedAmount = Number.isFinite(amountUsd) ? Math.max(1, amountUsd) : 1;
+  const normalizedAmount = Number.isFinite(amountUsd) ? Math.max(0, amountUsd) : 0;
   const sizeThousands = priceReady
     ? normalizedAmount / ((effectivePriceCents as number) / 100) / 1000
     : 0;
@@ -181,25 +181,12 @@ export function TradeTicketPanel() {
       : { sizeInContracts: estimatedShares, worstCasePrice: 0, requiredCollateral: 0 };
   const requiredCollateralUsd = collateralEstimation.requiredCollateral;
   const balanceGateActive = safeRequired && safeReady && Boolean(safeAddress);
-  const exceedsSafeBalance =
-    balanceGateActive &&
-    safeBalanceValue != null &&
-    requiredCollateralUsd > safeBalanceValue + COLLATERAL_TOLERANCE;
-  const safeBalanceUnavailable =
-    balanceGateActive &&
-    !safeBalanceLoading &&
-    safeBalanceValue == null &&
-    Boolean(safeBalanceErrorMessage);
-  const balanceBlocksSubmit =
-    balanceGateActive &&
-    (safeBalanceLoading || safeBalanceValue == null || exceedsSafeBalance);
   const submitDisabled =
     !effectiveTokenId ||
     placeOrder.isPending ||
     !safeReady ||
     normalizedPriceCents == null ||
-    normalizedSizeThousands <= 0 ||
-    balanceBlocksSubmit;
+    normalizedSizeThousands <= 0;
   const orderErrorCode = getOrderErrorCode(placeOrder.error);
   const showInsufficientFunds = orderErrorCode === 'INSUFFICIENT_FUNDS';
 
@@ -220,8 +207,7 @@ export function TradeTicketPanel() {
       !activeMarket ||
       !effectiveTokenId ||
       normalizedPriceCents == null ||
-      normalizedSizeThousands <= 0 ||
-      balanceBlocksSubmit
+      normalizedSizeThousands <= 0
     ) {
       return;
     }
@@ -271,24 +257,6 @@ export function TradeTicketPanel() {
             Polygon USDC, then return to execute.
           </Alert>
         ) : null}
-        {balanceGateActive && safeReady && safeBalanceLoading ? (
-          <Alert severity="info" variant="outlined">
-            Checking Safe balance…
-          </Alert>
-        ) : null}
-        {safeBalanceUnavailable ? (
-          <Alert severity="error" variant="outlined">
-            Unable to load Safe balance{safeBalanceErrorMessage ? `: ${safeBalanceErrorMessage}` : ''}.
-          </Alert>
-        ) : null}
-        {exceedsSafeBalance ? (
-          <Alert severity="warning" variant="outlined">
-            Insufficient Safe funds. Need ${requiredCollateralUsd.toFixed(2)} while your Safe holds $
-            {safeBalanceValue != null ? safeBalanceValue.toFixed(2) : '0.00'}. Fund your Safe in your
-            profile before sniping.
-          </Alert>
-        ) : null}
-
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
         <ButtonGroup fullWidth size="small" variant="outlined">
           {(['BUY', 'SELL'] as const).map((option) => (
@@ -359,7 +327,7 @@ export function TradeTicketPanel() {
             size="medium"
             type="number"
             value={amountUsd}
-            inputProps={{ min: 1, step: 1, style: { fontSize: '1.2rem', padding: '14px 12px' } }}
+            inputProps={{ min: 0, step: 1, style: { fontSize: '1.2rem', padding: '14px 12px' } }}
             onChange={(event) => {
               const next = Number(event.target.value);
               setAmountUsd(Number.isFinite(next) ? next : 0);
@@ -436,17 +404,16 @@ export function TradeTicketPanel() {
             Fill price {priceReady ? `${(effectivePriceCents as number).toFixed(2)}¢` : '––'} · Side{' '}
             {side === 'BUY' ? 'Buy' : 'Sell'}
           </Typography>
-          {balanceGateActive ? (
-            <Typography variant="caption" color="text.secondary">
-              Safe balance $
-              {safeBalanceValue != null
+          <Typography variant="caption" color="text.secondary">
+            Safe balance $
+            {balanceGateActive
+              ? safeBalanceValue != null
                 ? safeBalanceValue.toFixed(2)
                 : safeBalanceLoading
                   ? 'checking…'
-                  : '––'}{' '}
-              · Required collateral ${requiredCollateralUsd > 0 ? requiredCollateralUsd.toFixed(2) : '0.00'}
-            </Typography>
-          ) : null}
+                  : safeBalanceErrorMessage ?? '––'
+              : '––'}
+          </Typography>
         </Stack>
 
         <Button

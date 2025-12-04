@@ -22,7 +22,7 @@ import StarOutlineIcon from '@mui/icons-material/StarOutline';
 import StarIcon from '@mui/icons-material/Star';
 
 import { PanelCard } from './PanelCard';
-import { useMarketsData } from '@/hooks/useTerminalData';
+import { useMarketsData, useSportsMarketsData } from '@/hooks/useTerminalData';
 import { useTerminalStore } from '@/state/useTerminalStore';
 import { useUserWatchlist } from '@/hooks/useWatchlist';
 import type { Market, MarketCategory } from '@/lib/api/types';
@@ -104,6 +104,13 @@ export function WatchlistPanel() {
   const [favoritesOnly, setFavoritesOnly] = React.useState(false);
   const [categoryFilter, setCategoryFilter] =
     React.useState<(typeof CATEGORY_FILTERS)[number]['id']>('all');
+  const sportsFilterActive = categoryFilter === 'sports';
+  const {
+    data: sportsData,
+    isFetching: isFetchingSports,
+    isError: sportsError,
+  } = useSportsMarketsData(sportsFilterActive);
+  const sportsMarkets = React.useMemo(() => sportsData ?? [], [sportsData]);
   const [sportsLeagueFilter, setSportsLeagueFilter] =
     React.useState<SportsLeagueFilter>('all');
   const [insightOpen, setInsightOpen] = React.useState(false);
@@ -120,6 +127,12 @@ export function WatchlistPanel() {
       setSportsLeagueFilter('all');
     }
   }, [categoryFilter]);
+
+  const activeMarkets = React.useMemo(
+    () => (sportsFilterActive ? sportsMarkets : markets),
+    [sportsFilterActive, sportsMarkets, markets],
+  );
+  const activeIsFetching = sportsFilterActive ? isFetchingSports : isFetching;
 
   const openInsight = React.useCallback(async (market: Market) => {
     setInsightMarket(market);
@@ -176,10 +189,10 @@ export function WatchlistPanel() {
   }, [selectedMarketId, defaultMarket, setSelection]);
 
   const sortedMarkets = React.useMemo(() => {
-    const favorites = markets.filter((market) => watchlist.includes(market.conditionId));
-    const others = markets.filter((market) => !watchlist.includes(market.conditionId));
+    const favorites = activeMarkets.filter((market) => watchlist.includes(market.conditionId));
+    const others = activeMarkets.filter((market) => !watchlist.includes(market.conditionId));
     return [...favorites, ...others];
-  }, [markets, watchlist]);
+  }, [activeMarkets, watchlist]);
 
   const autoMarkets = React.useMemo(() => {
     if (watchlist.length > 0) {
@@ -195,17 +208,14 @@ export function WatchlistPanel() {
       }
       return list.filter((market) => deriveCategory(market) === categoryFilter);
     };
-    const applySportsLeague = (list: Market[]) => {
-      if (categoryFilter !== 'sports' || sportsLeagueFilter === 'all') {
+    const applySportsLeagueFilter = (list: Market[]) => {
+      if (!sportsFilterActive || sportsLeagueFilter === 'all') {
         return list;
       }
-      return list.filter(
-        (market) => deriveSportsLeague(market) === sportsLeagueFilter,
-      );
+      return list.filter((market) => deriveSportsLeague(market) === sportsLeagueFilter);
     };
-
     const maybeSortSports = (list: Market[]) => {
-      if (categoryFilter !== 'sports') {
+      if (!sportsFilterActive) {
         return list;
       }
       return [...list].sort((a, b) => {
@@ -215,17 +225,14 @@ export function WatchlistPanel() {
       });
     };
 
-    if (favoritesOnly) {
-      return maybeSortSports(
-        applySportsLeague(
-          applyCategory(sortedMarkets.filter((market) => watchlist.includes(market.conditionId))),
-        ),
-      );
-    }
-    if (sortedMarkets.length) {
-      return maybeSortSports(applySportsLeague(applyCategory(sortedMarkets)));
-    }
-    return maybeSortSports(applySportsLeague(applyCategory(autoMarkets)));
+    const baseList = sortedMarkets.length
+      ? sortedMarkets
+      : sportsFilterActive
+        ? []
+        : autoMarkets;
+    const starred = baseList.filter((market) => watchlist.includes(market.conditionId));
+    const workingSet = favoritesOnly ? starred : baseList;
+    return maybeSortSports(applySportsLeagueFilter(applyCategory(workingSet)));
   }, [
     favoritesOnly,
     sortedMarkets,
@@ -233,6 +240,7 @@ export function WatchlistPanel() {
     autoMarkets,
     categoryFilter,
     sportsLeagueFilter,
+    sportsFilterActive,
   ]);
 
   return (
@@ -253,6 +261,11 @@ export function WatchlistPanel() {
         {isError ? (
           <Alert severity="warning" variant="outlined">
             Unable to load your watchlist. Refresh or check your session.
+          </Alert>
+        ) : null}
+        {sportsFilterActive && sportsError ? (
+          <Alert severity="error" variant="outlined">
+            Unable to load the full sports board. Refresh to try again.
           </Alert>
         ) : null}
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
@@ -281,13 +294,13 @@ export function WatchlistPanel() {
             ))}
           </Stack>
         ) : null}
-        {autoMarkets.length > 0 && !watchlist.length ? (
+        {!sportsFilterActive && autoMarkets.length > 0 && !watchlist.length ? (
           <Alert severity="info" variant="outlined">
             Showing a rotating mix of trending Polymarket markets. Star any card to pin it to your
             watchlist.
           </Alert>
         ) : null}
-        {isFetching && !markets.length ? (
+        {activeIsFetching && !activeMarkets.length ? (
           <Skeleton variant="rounded" height={220} />
         ) : (
           <Box
@@ -323,6 +336,7 @@ export function WatchlistPanel() {
                         market.outcomes?.[0]?.label ??
                         'Yes',
                       openDepthOverlay: true,
+                      market,
                     })
                   }
                   sx={{
@@ -397,6 +411,7 @@ export function WatchlistPanel() {
                             question: market.question,
                             outcomeLabel: option.label,
                             openDepthOverlay: true,
+                            market,
                           });
                         }}
                       />
@@ -418,17 +433,13 @@ export function WatchlistPanel() {
             No starred markets yet. Click the star icon to pin favorites.
           </Typography>
         ) : null}
-        {!isFetching && watchlist.length === 0 && autoMarkets.length === 0 ? (
+        {!sportsFilterActive && !activeIsFetching && watchlist.length === 0 && autoMarkets.length === 0 ? (
           <Typography variant="caption" color="text.secondary">
             Tap the star icon or use the search bar to build a personalized watchlist.
           </Typography>
         ) : null}
       </Stack>
-      <LinearProgress
-        variant="determinate"
-        value={isFetching ? 25 : 72}
-        sx={{ height: 4, borderRadius: 999 }}
-      />
+      <LinearProgress variant="determinate" value={activeIsFetching ? 25 : 72} sx={{ height: 4, borderRadius: 999 }} />
       <Typography variant="caption" color="text.secondary">
         Market data refreshed live via relayer feed.
       </Typography>

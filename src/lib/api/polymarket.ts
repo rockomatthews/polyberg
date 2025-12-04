@@ -34,7 +34,7 @@ export async function fetchMarkets(): Promise<Market[]> {
     console.warn('[cache] read markets failed', error);
   }
   try {
-    const data = await apiGet<{ markets: Market[] }>('/api/polymarket/markets?limit=72');
+    const data = await apiGet<{ markets: Market[] }>('/api/polymarket/markets?limit=200');
     if (data.markets?.length) {
       setCached('markets:latest', data.markets, 5).catch((err) =>
         console.warn('[cache] set markets failed', err),
@@ -46,6 +46,29 @@ export async function fetchMarkets(): Promise<Market[]> {
     return data.markets;
   } catch (error) {
     console.error('[api] fetchMarkets failed', error);
+    return [];
+  }
+}
+
+export async function fetchSportsMarkets(): Promise<Market[]> {
+  try {
+    const cached = await getCached<Market[]>('markets:sports:latest');
+    if (cached?.length) {
+      return cached;
+    }
+  } catch (error) {
+    console.warn('[cache] read sports markets failed', error);
+  }
+  try {
+    const data = await apiGet<{ markets: Market[] }>('/api/polymarket/sports?limit=250');
+    if (data.markets?.length) {
+      setCached('markets:sports:latest', data.markets, 5).catch((err) =>
+        console.warn('[cache] set sports markets failed', err),
+      );
+    }
+    return data.markets;
+  } catch (error) {
+    console.error('[api] fetchSportsMarkets failed', error);
     return [];
   }
 }

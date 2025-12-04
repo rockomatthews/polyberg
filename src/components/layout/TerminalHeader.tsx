@@ -27,6 +27,29 @@ import { searchMarkets } from '@/lib/api/polymarket';
 import type { Market } from '@/lib/api/types';
 import { useTerminalStore } from '@/state/useTerminalStore';
 
+const SPORTS_SEARCH_KEYWORDS = [
+  ' sports',
+  ' vs ',
+  'vs.',
+  'nfl',
+  'nba',
+  'mlb',
+  'nhl',
+  'soccer',
+  'cfb',
+  'cbb',
+  'ufc',
+  'mma',
+  'golf',
+  'tennis',
+  'draw',
+  'moneyline',
+  'spread',
+  'over',
+  'under',
+  'mls',
+];
+
 type MarketSearchInputProps = {
   fullWidth?: boolean;
 };
@@ -54,9 +77,17 @@ function MarketSearchInput({ fullWidth }: MarketSearchInputProps) {
   const handleSelect = (market: Market) => {
     if (!market.primaryTokenId) return;
     const slug = market.slug ?? market.conditionId;
-    const isSports =
-      market.category === 'sports' ||
-      (market.tag ? market.tag.toLowerCase().includes('sports') : false);
+    const haystacks = [
+      market.category ?? '',
+      market.tag ?? '',
+      market.question ?? '',
+      slug ?? '',
+    ]
+      .filter(Boolean)
+      .map((value) => value.toLowerCase());
+    const isSports = SPORTS_SEARCH_KEYWORDS.some((keyword) =>
+      haystacks.some((text) => text.includes(keyword)),
+    );
     if (isSports && slug) {
       router.push(`/sports/${encodeURIComponent(slug)}`);
       setValue('');

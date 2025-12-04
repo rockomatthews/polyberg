@@ -8,6 +8,7 @@ import {
   fetchOrderBook,
   fetchOrders,
   fetchPositions,
+  fetchSportsMarkets,
   fetchSystemStatus,
 } from '@/lib/api/polymarket';
 
@@ -15,6 +16,15 @@ export function useMarketsData() {
   return useQuery({
     queryKey: ['markets'],
     queryFn: fetchMarkets,
+    staleTime: 15_000,
+  });
+}
+
+export function useSportsMarketsData(enabled = true) {
+  return useQuery({
+    queryKey: ['sports-markets'],
+    queryFn: fetchSportsMarkets,
+    enabled,
     staleTime: 15_000,
   });
 }

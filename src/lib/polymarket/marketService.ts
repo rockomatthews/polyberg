@@ -119,66 +119,70 @@ export async function loadMarketSnapshots(
   return hydrateMarkets(curated);
 }
 
+export async function loadSportsMarkets(options: { limit?: number; now?: number } = {}) {
+  const limit = clampLimit(Number.isFinite(options.limit) ? Number(options.limit) : 200);
+  const now = options.now ?? Date.now();
+  const sourceMarkets = await fetchEligibleMarkets(now);
+  const deduped = new Map<string, ClobMarket>();
+  sourceMarkets.forEach((market) => {
+    if (resolveCategory(market) !== 'sports') {
+      return;
+    }
+    if (!deduped.has(market.condition_id)) {
+      deduped.set(market.condition_id, market);
+    }
+  });
+  const sorted = Array.from(deduped.values()).sort((a, b) => {
+    const aStart =
+      resolveEventStartTimestamp(a) ?? resolveEndTimestamp(a.end_date_iso ?? a.endDate) ?? Infinity;
+    const bStart =
+      resolveEventStartTimestamp(b) ?? resolveEndTimestamp(b.end_date_iso ?? b.endDate) ?? Infinity;
+    return aStart - bStart;
+  });
+  return hydrateMarkets(sorted.slice(0, limit));
+}
+
 async function hydrateMarkets(markets: ClobMarket[]): Promise<Market[]> {
-  return Promise.all(
-    markets.map(async (market) => {
-      const category: MarketCategory = resolveCategory(market);
-      const outcomes =
-        market.tokens
-          ?.slice(0, 3)
-          .map((token) => ({
-            tokenId: token.token_id ?? null,
-            label: token.outcome ?? null,
-            price: token.price != null ? Number(token.price) * 100 : null,
-          })) ?? [];
-      const primaryToken = market.tokens?.[0];
-      let bestBid: number | null = null;
-      let bestAsk: number | null = null;
-      let liquidity: number | null = null;
+  return markets.map((market) => {
+    const category: MarketCategory = resolveCategory(market);
+    const outcomes =
+      market.tokens
+        ?.slice(0, 3)
+        .map((token) => ({
+          tokenId: token.token_id ?? null,
+          label: token.outcome ?? null,
+          price: token.price != null ? Number(token.price) * 100 : null,
+        })) ?? [];
+    const primaryToken = market.tokens?.[0];
+    const secondaryToken = market.tokens?.[1];
+    const bestBid =
+      primaryToken?.price != null ? Number(primaryToken.price) * 100 : null;
+    const bestAsk =
+      secondaryToken?.price != null ? Number(secondaryToken.price) * 100 : null;
+    const liquidity = resolveLiquidity(market) || null;
 
-      if (primaryToken?.token_id) {
-        try {
-          const summary = await clobClient.getOrderBook(primaryToken.token_id);
-          bestBid = summary.bids?.length ? Number(summary.bids[0].price) * 100 : null;
-          bestAsk = summary.asks?.length ? Number(summary.asks[0].price) * 100 : null;
-          const bidDepth = (summary.bids ?? [])
-            .slice(0, 3)
-            .reduce((acc, level) => acc + Number(level.size), 0);
-          const askDepth = (summary.asks ?? [])
-            .slice(0, 3)
-            .reduce((acc, level) => acc + Number(level.size), 0);
-          liquidity = Number((bidDepth + askDepth).toFixed(2));
-        } catch (error) {
-          logger.warn('markets.orderbook.failed', {
-            tokenId: primaryToken?.token_id,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-
-      return {
-        conditionId: market.condition_id,
-        question: market.question,
-        slug: market.market_slug,
-        icon: market.icon ?? market.image ?? null,
-        tag: market.tags?.[0] ?? null,
-        endDate: market.end_date_iso ?? null,
-        primaryTokenId: primaryToken?.token_id ?? null,
-        secondaryTokenId: market.tokens?.[1]?.token_id ?? null,
-        primaryOutcome: market.tokens?.[0]?.outcome ?? null,
-        secondaryOutcome: market.tokens?.[1]?.outcome ?? null,
-        bestBid,
-        bestAsk,
-        spread:
-          bestBid != null && bestAsk != null
-            ? Number(Math.abs(bestAsk - bestBid).toFixed(2))
-            : null,
-        liquidity,
-        outcomes,
-        category,
-      } satisfies Market;
-    }),
-  );
+    return {
+      conditionId: market.condition_id,
+      question: market.question,
+      slug: market.market_slug,
+      icon: market.icon ?? market.image ?? null,
+      tag: market.tags?.[0] ?? null,
+      endDate: market.end_date_iso ?? null,
+      primaryTokenId: primaryToken?.token_id ?? null,
+      secondaryTokenId: secondaryToken?.token_id ?? null,
+      primaryOutcome: primaryToken?.outcome ?? null,
+      secondaryOutcome: secondaryToken?.outcome ?? null,
+      bestBid,
+      bestAsk,
+      spread:
+        bestBid != null && bestAsk != null
+          ? Number(Math.abs(bestAsk - bestBid).toFixed(2))
+          : null,
+      liquidity,
+      outcomes,
+      category,
+    } satisfies Market;
+  });
 }
 
 function matchesQuery(query: string, market: ClobMarket) {
@@ -227,7 +231,7 @@ function resolveLiquidity(market: ClobMarket) {
 }
 
 function clampLimit(value: number) {
-  return Math.min(Math.max(value, 1), 25);
+  return Math.min(Math.max(value, 1), 250);
 }
 
 function normalize(text?: string | null) {
@@ -255,7 +259,7 @@ async function fetchSamplingMarkets(): Promise<ClobMarket[]> {
   }
 }
 
-const SPORTS_TARGET_COUNT = 120;
+const SPORTS_TARGET_COUNT = 240;
 const SPORTS_LOOKAHEAD_HOURS = 24 * 7;
 const SPORTS_LOOKBACK_HOURS = 12;
 

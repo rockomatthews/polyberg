@@ -51,6 +51,8 @@ export function TradeTicketPanel() {
   const { data: orderBook } = useOrderBookData(selectedTokenId);
   const { safeStatus } = useSafeStatus();
   const safeAddress = safeStatus?.safeAddress ?? null;
+  const safeRequired = safeStatus?.requireSafe ?? false;
+  const safeReady = safeStatus?.state === 'ready' || !safeRequired;
   const safeBalanceQuery = useSafeBalance(safeReady ? safeAddress : null, {
     enabled: safeReady && Boolean(safeAddress),
     refetchInterval: safeReady ? 15_000 : false,
@@ -112,7 +114,7 @@ export function TradeTicketPanel() {
         const error = new Error(message) as OrderMutationError;
         if ('code' in json && typeof json.code === 'string') {
           error.code = json.code;
-        }
+      }
         error.status = response.status;
         throw error;
       }
@@ -288,32 +290,32 @@ export function TradeTicketPanel() {
         ) : null}
 
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
-          <ButtonGroup fullWidth size="small" variant="outlined">
-            {(['BUY', 'SELL'] as const).map((option) => (
-              <Button
-                key={option}
-                color={option === 'BUY' ? 'success' : 'error'}
-                variant={side === option ? 'contained' : 'outlined'}
-                onClick={() => setSide(option)}
-              >
+        <ButtonGroup fullWidth size="small" variant="outlined">
+          {(['BUY', 'SELL'] as const).map((option) => (
+            <Button
+              key={option}
+              color={option === 'BUY' ? 'success' : 'error'}
+              variant={side === option ? 'contained' : 'outlined'}
+              onClick={() => setSide(option)}
+            >
                 {option === 'BUY' ? 'Buy (Long)' : 'Sell (Short)'}
-              </Button>
-            ))}
-          </ButtonGroup>
-          <ButtonGroup fullWidth size="small" variant="outlined">
-            <Button
+            </Button>
+          ))}
+        </ButtonGroup>
+        <ButtonGroup fullWidth size="small" variant="outlined">
+          <Button
               variant={isMarketOrder ? 'contained' : 'outlined'}
-              onClick={() => setExecutionMode('aggressive')}
-            >
+            onClick={() => setExecutionMode('aggressive')}
+          >
               Market
-            </Button>
-            <Button
+          </Button>
+          <Button
               variant={!isMarketOrder ? 'contained' : 'outlined'}
-              onClick={() => setExecutionMode('passive')}
-            >
+            onClick={() => setExecutionMode('passive')}
+          >
               Limit
-            </Button>
-          </ButtonGroup>
+          </Button>
+        </ButtonGroup>
         </Stack>
 
         {marketOutcomes.length ? (
@@ -367,13 +369,13 @@ export function TradeTicketPanel() {
         </Stack>
 
         {!isMarketOrder ? (
-          <Stack spacing={1}>
-            <Typography variant="caption" color="text.secondary">
+        <Stack spacing={1}>
+          <Typography variant="caption" color="text.secondary">
               Limit price (¢)
-            </Typography>
+          </Typography>
             <TextField
               variant="outlined"
-              size="small"
+            size="small"
               type="number"
               value={Number.isFinite(limitPrice) ? limitPrice : ''}
               inputProps={{ min: 1, max: 99, step: 0.1 }}
@@ -393,7 +395,7 @@ export function TradeTicketPanel() {
               Market order will execute at best available book price (currently{' '}
               {marketPriceCents != null ? `${Number(marketPriceCents).toFixed(2)}¢` : '––'}).
             </Typography>
-          </Stack>
+        </Stack>
         )}
 
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>

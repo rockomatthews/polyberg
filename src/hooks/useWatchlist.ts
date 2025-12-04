@@ -1,3 +1,6 @@
+'use client';
+
+import { signIn, useSession } from 'next-auth/react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 type WatchlistResponse = {
@@ -14,6 +17,8 @@ async function fetchWatchlist(): Promise<string[]> {
 }
 
 export function useUserWatchlist() {
+  const { status } = useSession();
+  const isAuthenticated = status === 'authenticated';
   const queryClient = useQueryClient();
 
   const query = useQuery({
@@ -52,7 +57,16 @@ export function useUserWatchlist() {
     onSuccess: invalidate,
   });
 
+  const requestAuth = () => {
+    const callbackUrl = typeof window !== 'undefined' ? window.location.href : '/';
+    void signIn(undefined, { callbackUrl });
+  };
+
   const toggleWatchlist = (conditionId: string, shouldWatch: boolean) => {
+    if (!isAuthenticated) {
+      requestAuth();
+      return;
+    }
     if (shouldWatch) {
       addMutation.mutate(conditionId);
     } else {
@@ -67,6 +81,7 @@ export function useUserWatchlist() {
     toggleWatchlist,
     adding: addMutation.isPending,
     removing: removeMutation.isPending,
+    isAuthenticated,
   };
 }
 

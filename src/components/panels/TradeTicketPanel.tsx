@@ -9,6 +9,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import { useMutation } from '@tanstack/react-query';
+import { signIn, useSession } from 'next-auth/react';
 
 import { PanelCard } from './PanelCard';
 import { useMarketsData, useOrderBookData } from '@/hooks/useTerminalData';
@@ -34,6 +35,8 @@ const getOrderErrorCode = (error: unknown): string | undefined => {
 };
 
 export function TradeTicketPanel() {
+  const { status } = useSession();
+  const isAuthenticated = status === 'authenticated';
   const { data: markets } = useMarketsData();
   const selectedMarketId = useTerminalStore((state) => state.selectedMarketId);
   const selectedTokenId = useTerminalStore((state) => state.selectedTokenId);
@@ -66,6 +69,7 @@ export function TradeTicketPanel() {
   const [side, setSide] = React.useState<'BUY' | 'SELL'>('BUY');
   const [slippage, setSlippage] = React.useState(2);
   const [timeInForce, setTimeInForce] = React.useState(30);
+  const [authRedirecting, setAuthRedirecting] = React.useState(false);
 
   type SubmitPayload = {
     tokenId: string;
@@ -160,6 +164,18 @@ export function TradeTicketPanel() {
   const showInsufficientFunds = orderErrorCode === 'INSUFFICIENT_FUNDS';
 
   const handleSubmit = () => {
+    if (!isAuthenticated) {
+      if (typeof window !== 'undefined') {
+        setAuthRedirecting(true);
+        void signIn(undefined, { callbackUrl: window.location.href }).finally(() => {
+          setAuthRedirecting(false);
+        });
+      } else {
+        void signIn();
+      }
+      return;
+    }
+
     if (
       !activeMarket ||
       !effectiveTokenId ||
@@ -202,6 +218,12 @@ export function TradeTicketPanel() {
       }
     >
       <Stack spacing={2}>
+        {!isAuthenticated ? (
+          <Alert severity="info" variant="outlined">
+            Create an account or sign in to execute live orders. You can browse markets without an
+            account, but trading requires authentication.
+          </Alert>
+        ) : null}
         {safeRequired && !safeReady ? (
           <Alert severity="warning" variant="outlined">
             Gasless trading requires an active Safe. Deploy one from your profile, fund it with
@@ -363,13 +385,13 @@ export function TradeTicketPanel() {
           variant="contained"
           size="large"
           onClick={handleSubmit}
-          disabled={submitDisabled}
+          disabled={submitDisabled && isAuthenticated}
           sx={{ alignSelf: 'flex-start' }}
         >
-          {placeOrder.isPending ? (
+          {placeOrder.isPending || authRedirecting ? (
             <Stack direction="row" spacing={1} alignItems="center">
               <CircularProgress size={18} color="inherit" />
-              <span>Executing…</span>
+              <span>{authRedirecting ? 'Redirecting…' : 'Executing…'}</span>
             </Stack>
           ) : (
             'Execute Order'

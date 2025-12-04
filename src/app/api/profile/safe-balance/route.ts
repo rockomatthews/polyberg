@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
-import { JsonRpcProvider, StaticJsonRpcProvider } from '@ethersproject/providers';
 import { Interface } from '@ethersproject/abi';
 import { BigNumber } from '@ethersproject/bignumber';
 import { getAddress } from '@ethersproject/address';
@@ -18,20 +17,6 @@ const DEFAULT_POLYGON_RPCS = [
   'https://polygon.llamarpc.com',
 ];
 
-const providerCache = new Map<string, JsonRpcProvider>();
-
-function getProvider(rpcUrl: string) {
-  if (!providerCache.has(rpcUrl)) {
-    const chainId = env.relayerChainId ?? env.polymarketChainId;
-    const network = { chainId, name: `polygon-${chainId}` };
-    providerCache.set(
-      rpcUrl,
-      new StaticJsonRpcProvider({ url: rpcUrl, timeout: 15_000 }, network),
-    );
-  }
-  return providerCache.get(rpcUrl)!;
-}
-
 function sanitizeRpcMessage(message: string) {
   if (env.relayerRpcUrl) {
     return message.replaceAll(env.relayerRpcUrl, '[custom RPC]');
@@ -39,12 +24,52 @@ function sanitizeRpcMessage(message: string) {
   return message;
 }
 
-function extractErrorCode(error: unknown): string | undefined {
-  if (error && typeof error === 'object' && 'code' in error) {
-    const value = (error as { code?: unknown }).code;
-    return typeof value === 'string' ? value : undefined;
+type RpcFailure = { rpcUrl: string; message: string; code?: string | number };
+
+async function fetchBalanceOf(rpcUrl: string, safeAddress: string, collateralAddress: string) {
+  const payload = {
+    jsonrpc: '2.0',
+    id: Date.now(),
+    method: 'eth_call' as const,
+    params: [
+      {
+        to: collateralAddress,
+        data: erc20Interface.encodeFunctionData('balanceOf', [safeAddress]),
+      },
+      'latest',
+    ],
+  };
+
+  const response = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`RPC ${response.status} ${response.statusText}: ${text}`.trim());
   }
-  return undefined;
+
+  const json = (await response.json()) as
+    | { result: string }
+    | { error: { code?: string | number; message?: string } };
+
+  if ('error' in json) {
+    const { code, message } = json.error ?? {};
+    const err = new Error(message ?? 'RPC error');
+    (err as { code?: string | number }).code = code;
+    throw err;
+  }
+
+  if (!('result' in json) || typeof json.result !== 'string') {
+    throw new Error('RPC result missing');
+  }
+
+  const balanceBN = BigNumber.from(json.result);
+  const balanceFloat = Number(formatUnits(balanceBN, USDC_DECIMALS));
+  return { balanceBN, balanceFloat };
 }
 
 export async function handleSafeBalance(request: NextRequest, safeOverride?: string) {
@@ -83,40 +108,38 @@ export async function handleSafeBalance(request: NextRequest, safeOverride?: str
     ),
   );
 
-  const failures: Array<{ rpcUrl: string; message: string; code?: string }> = [];
+  const failures: Array<RpcFailure> = [];
   let sawCallException = false;
 
   for (const rpcUrl of rpcUrls) {
     try {
-      const provider = getProvider(rpcUrl);
-      const data = erc20Interface.encodeFunctionData('balanceOf', [safeAddress]);
-      const raw = await provider.call({
-        to: collateralAddress,
-        data,
-      });
-      const [balanceBN] = erc20Interface.decodeFunctionResult('balanceOf', raw) as [BigNumber];
-      const balanceFloat = Number(formatUnits(balanceBN, USDC_DECIMALS));
+      const { balanceBN, balanceFloat } = await fetchBalanceOf(rpcUrl, safeAddress, collateralAddress);
       return NextResponse.json({
         balance: balanceFloat,
         raw: balanceBN.toString(),
         collateralAddress,
       });
     } catch (error) {
-      const sanitizedMessage =
+      const message =
         error instanceof Error ? sanitizeRpcMessage(error.message) : 'RPC request failed';
       const label =
         env.relayerRpcUrl && rpcUrl === env.relayerRpcUrl ? 'custom' : 'public fallback';
-      const code = extractErrorCode(error);
-      failures.push({ rpcUrl: label, message: sanitizedMessage, code });
+      const code =
+        error && typeof error === 'object' && 'code' in error
+          ? (error as { code?: string | number }).code
+          : undefined;
+      failures.push({ rpcUrl: label, message, code });
+      const lowerMessage = message.toLowerCase();
       if (
         code === 'CALL_EXCEPTION' ||
-        sanitizedMessage.includes('missing revert data in call exception')
+        lowerMessage.includes('call exception') ||
+        lowerMessage.includes('revert')
       ) {
         sawCallException = true;
       }
       logger.error('safeBalance.rpc.failed', {
         rpc: label,
-        message: sanitizedMessage,
+        message,
         code,
       });
     }

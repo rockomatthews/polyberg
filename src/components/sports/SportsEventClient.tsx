@@ -182,5 +182,5 @@ export function SportsEventClient({ event }: SportsEventClientProps) {
 }
 
 const formatPrice = (value: number | null) =>
-  value != null && !Number.isNaN(value) ? `${value.toFixed(2)}¢` : '––';
+  value != null && !Number.isNaN(value) ? `$${(value / 100).toFixed(2)}` : '––';
 

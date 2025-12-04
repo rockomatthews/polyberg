@@ -12,6 +12,13 @@ import { PanelCard } from './PanelCard';
 import { useMarketsData, useOrderBookData } from '@/hooks/useTerminalData';
 import { useTerminalStore } from '@/state/useTerminalStore';
 
+const formatBookPrice = (price?: number | null) => {
+  if (price == null || Number.isNaN(price)) {
+    return '––';
+  }
+  return `$${price.toFixed(2)}`;
+};
+
 export function DepthLadderPanel() {
   const { data: markets } = useMarketsData();
   const selectedMarketId = useTerminalStore((state) => state.selectedMarketId);
@@ -74,7 +81,7 @@ export function DepthLadderPanel() {
           }}
         >
           <Typography color="text.secondary">Bid Size</Typography>
-          <Typography color="text.secondary">Price (¢)</Typography>
+          <Typography color="text.secondary">Price ($)</Typography>
           <Typography color="text.secondary" textAlign="right">
             Ask Size
           </Typography>
@@ -92,9 +99,9 @@ export function DepthLadderPanel() {
               </Box>
               <Typography textAlign="center">
                 {row.bid?.price != null
-                  ? `${(row.bid.price * 100).toFixed(2)}¢`
+                  ? formatBookPrice(row.bid.price)
                   : row.ask?.price != null
-                  ? `${(row.ask.price * 100).toFixed(2)}¢`
+                  ? formatBookPrice(row.ask.price)
                   : '––'}
               </Typography>
               <Box

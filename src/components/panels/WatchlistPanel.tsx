@@ -62,9 +62,19 @@ const getTimeLeftLabel = (endDate: string | null) => {
 
 const formatLiquidity = (value: number | null) => {
   if (value == null || Number.isNaN(value)) return '––';
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
-  return value.toFixed(0);
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}k`;
+  return `$${value.toFixed(0)}`;
+};
+
+const formatPriceDollars = (value: number | null) => {
+  if (value == null || Number.isNaN(value)) return '––';
+  return `$${(value / 100).toFixed(2)}`;
+};
+
+const formatSpread = (value: number | null) => {
+  if (value == null || Number.isNaN(value)) return '––';
+  return `$${(value / 100).toFixed(2)}`;
 };
 
 const CATEGORY_FILTERS = [
@@ -317,8 +327,7 @@ export function WatchlistPanel() {
           >
             {filteredMarkets.map((market) => {
               const isActive = market.conditionId === selectedMarketId;
-              const spreadLabel =
-                market.spread != null ? `${market.spread.toFixed(2)}¢` : '––';
+              const spreadLabel = formatSpread(market.spread);
               const isFavorite = watchlist.includes(market.conditionId);
               const category = getMarketCategory(market);
               const outcomeOptions = buildOutcomeOptions(market);
@@ -556,7 +565,7 @@ function OutcomeButton({ option, active, onClick }: OutcomeButtonProps) {
           {option.label}
         </Typography>
         <Typography variant="caption" color="text.secondary">
-          {option.price != null ? `${option.price.toFixed(1)}¢` : 'Tap to trade'}
+          {option.price != null ? formatPriceDollars(option.price) : 'Tap to trade'}
         </Typography>
       </Stack>
     </Button>

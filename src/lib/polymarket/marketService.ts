@@ -272,7 +272,6 @@ async function fetchEligibleMarkets(now: number) {
     if (!market.active) return false;
     if (market.archived) return false;
     if (market.closed) return false;
-    if (market.accepting_orders === false) return false;
     const endTs = resolveEndTimestamp(market.end_date_iso ?? market.endDate);
     if (endTs && endTs < now - 6 * 60 * 60 * 1000) {
       return false;

@@ -11,9 +11,12 @@ import {
   ensureUserSafeReady,
   SafeNotReadyError,
 } from '@/lib/services/safeTradingGate';
-
-const MIN_PRICE = 0.001;
-const MAX_PRICE = 0.999;
+import {
+  clampPrice,
+  estimateOrderCollateral,
+  COLLATERAL_TOLERANCE,
+} from '@/lib/trading/collateral';
+import { getSafeBalance, SafeBalanceError } from '@/lib/services/safeBalanceService';
 
 const tradeSchema = z.object({
   tokenId: z.string().min(1),
@@ -185,8 +188,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
+  let safeAddress: string | null = null;
   try {
-    await ensureUserSafeReady(session.user.id);
+    safeAddress = await ensureUserSafeReady(session.user.id);
   } catch (error) {
     if (error instanceof SafeNotReadyError) {
       return NextResponse.json(
@@ -212,10 +216,54 @@ export async function POST(request: NextRequest) {
     parsedPayload = tradeSchema.parse(json);
 
     const priceDecimal = parsedPayload.price / 100;
-    const normalizedPrice = Math.min(Math.max(priceDecimal, MIN_PRICE), MAX_PRICE);
+    const normalizedPrice = clampPrice(priceDecimal);
     const limitPrice = Number(normalizedPrice.toFixed(3)); // clamp float noise before relayer call
     const sizeInContracts = parsedPayload.size * 1_000; // slider is expressed in "k"
     const deferExec = parsedPayload.executionMode === 'passive';
+
+    let availableSafeBalance: number | null = null;
+    try {
+      if (safeAddress) {
+        const { balance } = await getSafeBalance(safeAddress);
+        availableSafeBalance = balance;
+      }
+    } catch (error) {
+      if (error instanceof SafeBalanceError) {
+        logger.error('orders.safeBalance.failed', {
+          error: error.message,
+          status: error.status,
+        });
+        return NextResponse.json(
+          { error: error.message, code: 'SAFE_BALANCE_ERROR', meta: error.meta },
+          { status: error.status },
+        );
+      }
+      throw error;
+    }
+
+    const { requiredCollateral } = estimateOrderCollateral({
+      side: parsedPayload.side,
+      priceDecimals: limitPrice,
+      sizeThousands: parsedPayload.size,
+      slippageCents: parsedPayload.slippage,
+    });
+
+    if (
+      availableSafeBalance != null &&
+      requiredCollateral > availableSafeBalance + COLLATERAL_TOLERANCE
+    ) {
+      const formattedRequired = requiredCollateral.toFixed(2);
+      const formattedAvailable = availableSafeBalance.toFixed(2);
+      return NextResponse.json(
+        {
+          error: `Insufficient Safe balance. Need $${formattedRequired}, available $${formattedAvailable}.`,
+          code: 'INSUFFICIENT_FUNDS',
+          safeBalance: availableSafeBalance,
+          required: requiredCollateral,
+        },
+        { status: 402 },
+      );
+    }
 
     const result = await ensured.client.createAndPostOrder(
       {

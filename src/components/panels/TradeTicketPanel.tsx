@@ -8,13 +8,15 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { signIn, useSession } from 'next-auth/react';
 
 import { PanelCard } from './PanelCard';
 import { useMarketsData, useOrderBookData } from '@/hooks/useTerminalData';
 import { useTerminalStore } from '@/state/useTerminalStore';
 import { useSafeStatus } from '@/hooks/useSafeStatus';
+import { useSafeBalance } from '@/hooks/useSafeBalance';
+import { estimateOrderCollateral, COLLATERAL_TOLERANCE } from '@/lib/trading/collateral';
 
 const deriveMidPrice = (bid: number | null, ask: number | null) => {
   if (bid != null && ask != null) return (bid + ask) / 2;
@@ -35,6 +37,7 @@ const getOrderErrorCode = (error: unknown): string | undefined => {
 };
 
 export function TradeTicketPanel() {
+  const queryClient = useQueryClient();
   const { status } = useSession();
   const isAuthenticated = status === 'authenticated';
   const { data: markets } = useMarketsData();
@@ -47,6 +50,15 @@ export function TradeTicketPanel() {
   const setSelection = useTerminalStore((state) => state.setSelection);
   const { data: orderBook } = useOrderBookData(selectedTokenId);
   const { safeStatus } = useSafeStatus();
+  const safeAddress = safeStatus?.safeAddress ?? null;
+  const safeBalanceQuery = useSafeBalance(safeReady ? safeAddress : null, {
+    enabled: safeReady && Boolean(safeAddress),
+    refetchInterval: safeReady ? 15_000 : false,
+  });
+  const safeBalanceValue = safeBalanceQuery.data?.balance ?? null;
+  const safeBalanceLoading = safeBalanceQuery.isLoading || safeBalanceQuery.isFetching;
+  const safeBalanceErrorMessage =
+    safeBalanceQuery.error instanceof Error ? safeBalanceQuery.error.message : null;
 
   const activeMarket =
     markets?.find((market) => market.conditionId === selectedMarketId) ??
@@ -106,6 +118,13 @@ export function TradeTicketPanel() {
       }
       return json as OrderMutationResponse;
     },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['orders'] });
+      void queryClient.invalidateQueries({ queryKey: ['positions'] });
+      if (safeBalanceQuery.refetch) {
+        void safeBalanceQuery.refetch();
+      }
+    },
   });
 
   React.useEffect(() => {
@@ -133,8 +152,6 @@ export function TradeTicketPanel() {
     }
   }, [activeMarket, selectedTokenId, setSelection]);
 
-  const safeRequired = safeStatus?.requireSafe ?? false;
-  const safeReady = safeStatus?.state === 'ready' || !safeRequired;
   const effectiveTokenId = selectedTokenId ?? activeMarket?.primaryTokenId ?? null;
   const isMarketOrder = executionMode === 'aggressive';
   const marketPriceCents =
@@ -147,19 +164,40 @@ export function TradeTicketPanel() {
   const sizeThousands = priceReady
     ? normalizedAmount / ((effectivePriceCents as number) / 100) / 1000
     : 0;
-  const estimatedShares = sizeThousands * 1000;
-  const estimatedCost =
-    priceReady && estimatedShares > 0
-      ? (estimatedShares * (effectivePriceCents as number)) / 100
-      : 0;
   const normalizedPriceCents = priceReady ? Number((effectivePriceCents as number).toFixed(2)) : null;
   const normalizedSizeThousands = sizeThousands > 0 ? Number(sizeThousands.toFixed(6)) : 0;
+  const estimatedShares = normalizedSizeThousands * 1000;
+  const normalizedPriceDecimal = normalizedPriceCents != null ? normalizedPriceCents / 100 : null;
+  const collateralEstimation =
+    normalizedPriceDecimal != null
+      ? estimateOrderCollateral({
+          side,
+          priceDecimals: normalizedPriceDecimal,
+          sizeThousands: normalizedSizeThousands,
+          slippageCents: slippage,
+        })
+      : { sizeInContracts: estimatedShares, worstCasePrice: 0, requiredCollateral: 0 };
+  const requiredCollateralUsd = collateralEstimation.requiredCollateral;
+  const balanceGateActive = safeRequired && safeReady && Boolean(safeAddress);
+  const exceedsSafeBalance =
+    balanceGateActive &&
+    safeBalanceValue != null &&
+    requiredCollateralUsd > safeBalanceValue + COLLATERAL_TOLERANCE;
+  const safeBalanceUnavailable =
+    balanceGateActive &&
+    !safeBalanceLoading &&
+    safeBalanceValue == null &&
+    Boolean(safeBalanceErrorMessage);
+  const balanceBlocksSubmit =
+    balanceGateActive &&
+    (safeBalanceLoading || safeBalanceValue == null || exceedsSafeBalance);
   const submitDisabled =
     !effectiveTokenId ||
     placeOrder.isPending ||
     !safeReady ||
     normalizedPriceCents == null ||
-    normalizedSizeThousands <= 0;
+    normalizedSizeThousands <= 0 ||
+    balanceBlocksSubmit;
   const orderErrorCode = getOrderErrorCode(placeOrder.error);
   const showInsufficientFunds = orderErrorCode === 'INSUFFICIENT_FUNDS';
 
@@ -180,7 +218,8 @@ export function TradeTicketPanel() {
       !activeMarket ||
       !effectiveTokenId ||
       normalizedPriceCents == null ||
-      normalizedSizeThousands <= 0
+      normalizedSizeThousands <= 0 ||
+      balanceBlocksSubmit
     ) {
       return;
     }
@@ -228,6 +267,23 @@ export function TradeTicketPanel() {
           <Alert severity="warning" variant="outlined">
             Gasless trading requires an active Safe. Deploy one from your profile, fund it with
             Polygon USDC, then return to execute.
+          </Alert>
+        ) : null}
+        {balanceGateActive && safeReady && safeBalanceLoading ? (
+          <Alert severity="info" variant="outlined">
+            Checking Safe balance…
+          </Alert>
+        ) : null}
+        {safeBalanceUnavailable ? (
+          <Alert severity="error" variant="outlined">
+            Unable to load Safe balance{safeBalanceErrorMessage ? `: ${safeBalanceErrorMessage}` : ''}.
+          </Alert>
+        ) : null}
+        {exceedsSafeBalance ? (
+          <Alert severity="warning" variant="outlined">
+            Insufficient Safe funds. Need ${requiredCollateralUsd.toFixed(2)} while your Safe holds $
+            {safeBalanceValue != null ? safeBalanceValue.toFixed(2) : '0.00'}. Fund your Safe in your
+            profile before sniping.
           </Alert>
         ) : null}
 
@@ -371,13 +427,24 @@ export function TradeTicketPanel() {
 
         <Stack spacing={0.25}>
           <Typography variant="caption" color="text.secondary">
-            Est. shares {estimatedShares > 0 ? estimatedShares.toFixed(2) : '––'} · Est. cost $
-            {estimatedCost > 0 ? estimatedCost.toFixed(2) : '0.00'}
+            Est. shares {estimatedShares > 0 ? estimatedShares.toFixed(2) : '––'} · Collateral $
+            {requiredCollateralUsd > 0 ? requiredCollateralUsd.toFixed(2) : '0.00'}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             Fill price {priceReady ? `${(effectivePriceCents as number).toFixed(2)}¢` : '––'} · Side{' '}
             {side === 'BUY' ? 'Buy' : 'Sell'}
           </Typography>
+          {balanceGateActive ? (
+            <Typography variant="caption" color="text.secondary">
+              Safe balance $
+              {safeBalanceValue != null
+                ? safeBalanceValue.toFixed(2)
+                : safeBalanceLoading
+                  ? 'checking…'
+                  : '––'}{' '}
+              · Required collateral ${requiredCollateralUsd > 0 ? requiredCollateralUsd.toFixed(2) : '0.00'}
+            </Typography>
+          ) : null}
         </Stack>
 
         <Button

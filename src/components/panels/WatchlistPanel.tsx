@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
+import Chip, { type ChipProps } from '@mui/material/Chip';
 import LinearProgress from '@mui/material/LinearProgress';
 import Skeleton from '@mui/material/Skeleton';
 import Stack from '@mui/material/Stack';
@@ -76,6 +76,38 @@ const formatSpread = (value: number | null) => {
   return `$${(value / 100).toFixed(2)}`;
 };
 
+const formatKickoffLabel = (value: string | null) => {
+  if (!value) return 'TBD';
+  const kickoff = new Date(value);
+  if (Number.isNaN(kickoff.getTime())) return 'TBD';
+  const now = new Date();
+  const sameDay =
+    kickoff.getFullYear() === now.getFullYear() &&
+    kickoff.getMonth() === now.getMonth() &&
+    kickoff.getDate() === now.getDate();
+  const options: Intl.DateTimeFormatOptions = sameDay
+    ? { hour: 'numeric', minute: '2-digit' }
+    : { weekday: 'short', hour: 'numeric', minute: '2-digit' };
+  return kickoff.toLocaleString(undefined, options);
+};
+
+const slugifyTag = (value: string) =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'other';
+
+const normalizeLeagueId = (value?: string | null) => slugifyTag((value ?? SPORTS_FALLBACK_TAG).trim());
+
+const parseMatchupTeams = (question: string) => {
+  const normalized = question.replace(/\?/g, '');
+  const vsMatch = normalized.match(/(.+?)\s+(?:vs\.?|v\.?|@)\s+(.+)/i);
+  if (vsMatch) {
+    return {
+      teamA: vsMatch[1].trim(),
+      teamB: vsMatch[2].trim(),
+    };
+  }
+  return null;
+};
+
 const CATEGORY_FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'sports', label: 'Sports' },
@@ -85,23 +117,7 @@ const CATEGORY_FILTERS = [
   { id: 'macro', label: 'Macro' },
 ] as const;
 
-const SPORTS_LEAGUE_FILTERS = [
-  { id: 'all', label: 'All Sports' },
-  { id: 'nfl', label: 'NFL' },
-  { id: 'nba', label: 'NBA' },
-  { id: 'nhl', label: 'NHL' },
-  { id: 'mlb', label: 'MLB' },
-  { id: 'soccer', label: 'Soccer' },
-  { id: 'cfb', label: 'CFB' },
-  { id: 'cbb', label: 'CBB' },
-  { id: 'mma', label: 'MMA' },
-  { id: 'golf', label: 'Golf' },
-  { id: 'tennis', label: 'Tennis' },
-  { id: 'esports', label: 'Esports' },
-  { id: 'other', label: 'Other' },
-] as const;
-
-type SportsLeagueFilter = (typeof SPORTS_LEAGUE_FILTERS)[number]['id'];
+const SPORTS_FALLBACK_TAG = 'Sports';
 
 export function WatchlistPanel() {
   const { data, isFetching } = useMarketsData();
@@ -120,8 +136,18 @@ export function WatchlistPanel() {
     isError: sportsError,
   } = useSportsMarketsData(sportsFilterActive);
   const sportsMarkets = React.useMemo(() => sportsData ?? [], [sportsData]);
-  const [sportsLeagueFilter, setSportsLeagueFilter] =
-    React.useState<SportsLeagueFilter>('all');
+  const sportsLeagueOptions = React.useMemo(() => {
+    const entries = new Map<string, string>();
+    sportsMarkets.forEach((market) => {
+      const label = (market.tag ?? SPORTS_FALLBACK_TAG).trim();
+      const id = normalizeLeagueId(label);
+      if (!entries.has(id)) {
+        entries.set(id, label);
+      }
+    });
+    return [{ id: 'all', label: 'All Sports' }, ...Array.from(entries, ([id, label]) => ({ id, label }))];
+  }, [sportsMarkets]);
+  const [sportsLeagueFilter, setSportsLeagueFilter] = React.useState('all');
   const [insightOpen, setInsightOpen] = React.useState(false);
   const [insightMarket, setInsightMarket] = React.useState<Market | null>(null);
   const [insightLoading, setInsightLoading] = React.useState(false);
@@ -134,8 +160,13 @@ export function WatchlistPanel() {
   React.useEffect(() => {
     if (categoryFilter !== 'sports') {
       setSportsLeagueFilter('all');
+      return;
     }
-  }, [categoryFilter]);
+    const validIds = sportsLeagueOptions.map((option) => option.id);
+    if (!validIds.includes(sportsLeagueFilter)) {
+      setSportsLeagueFilter('all');
+    }
+  }, [categoryFilter, sportsLeagueOptions, sportsLeagueFilter]);
 
   const activeMarkets = React.useMemo(
     () => (sportsFilterActive ? sportsMarkets : markets),
@@ -221,7 +252,9 @@ export function WatchlistPanel() {
       if (!sportsFilterActive || sportsLeagueFilter === 'all') {
         return list;
       }
-      return list.filter((market) => deriveSportsLeague(market) === sportsLeagueFilter);
+      return list.filter(
+        (market) => normalizeLeagueId(market.tag ?? SPORTS_FALLBACK_TAG) === sportsLeagueFilter,
+      );
     };
     const maybeSortSports = (list: Market[]) => {
       if (!sportsFilterActive) {
@@ -291,7 +324,7 @@ export function WatchlistPanel() {
         </Stack>
         {categoryFilter === 'sports' ? (
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            {SPORTS_LEAGUE_FILTERS.map((filter) => (
+            {sportsLeagueOptions.map((filter) => (
               <Chip
                 key={filter.id}
                 size="small"
@@ -325,37 +358,51 @@ export function WatchlistPanel() {
             }}
           >
             {filteredMarkets.map((market) => {
-            const isActive = market.conditionId === selectedMarketId;
+              const isActive = market.conditionId === selectedMarketId;
               const spreadLabel = formatSpread(market.spread);
-            const isFavorite = watchlist.includes(market.conditionId);
+              const isFavorite = watchlist.includes(market.conditionId);
               const category = getMarketCategory(market);
               const outcomeOptions = buildOutcomeOptions(market);
-            return (
-              <Stack
-                key={market.conditionId}
-                spacing={1}
-                onClick={() =>
-                  setSelection({
-                    marketId: market.conditionId,
-                    tokenId: market.primaryTokenId,
+              const isSportsCard = sportsFilterActive;
+              const leagueLabel = (market.tag ?? SPORTS_FALLBACK_TAG).trim();
+              const statusLabel =
+                market.status === 'resolved'
+                  ? 'Resolved'
+                  : market.status === 'suspended'
+                    ? 'Suspended'
+                    : 'Live';
+              const statusColor: ChipProps['color'] =
+                market.status === 'resolved'
+                  ? 'default'
+                  : market.status === 'suspended'
+                    ? 'warning'
+                    : 'success';
+              const matchup = isSportsCard ? parseMatchupTeams(market.question) : null;
+              const kickoffLabel = isSportsCard ? formatKickoffLabel(market.endDate) : null;
+              return (
+                <Stack
+                  key={market.conditionId}
+                  spacing={1.25}
+                  onClick={() =>
+                    setSelection({
+                      marketId: market.conditionId,
+                      tokenId: market.primaryTokenId,
                       question: market.question,
                       outcomeLabel:
-                        market.primaryOutcome ??
-                        market.outcomes?.[0]?.label ??
-                        'Yes',
+                        market.primaryOutcome ?? market.outcomes?.[0]?.label ?? 'Yes',
                       openDepthOverlay: true,
                       market,
-                  })
-                }
-                sx={{
+                    })
+                  }
+                  sx={{
                     p: 1.25,
                     borderRadius: 1.2,
-                  bgcolor: isActive ? 'rgba(77,208,225,0.08)' : 'rgba(255,255,255,0.02)',
-                  border: `1px solid ${
-                    isActive ? 'rgba(77,208,225,0.4)' : 'rgba(255,255,255,0.04)'
-                  }`,
-                  cursor: 'pointer',
-                    minHeight: 140,
+                    bgcolor: isActive ? 'rgba(77,208,225,0.08)' : 'rgba(255,255,255,0.02)',
+                    border: `1px solid ${
+                      isActive ? 'rgba(77,208,225,0.4)' : 'rgba(255,255,255,0.04)'
+                    }`,
+                    cursor: 'pointer',
+                    minHeight: 160,
                     transition: 'border-color 120ms ease, transform 120ms ease',
                     '&:hover': {
                       borderColor: 'rgba(77,208,225,0.4)',
@@ -364,14 +411,49 @@ export function WatchlistPanel() {
                   }}
                 >
                   <Stack direction="row" spacing={1} alignItems="flex-start">
-                    <Stack flex={1} spacing={0.5}>
-                      <Typography variant="subtitle2" sx={{ minHeight: 48 }}>
-                        {market.question}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                        {market.tag || 'General'}
-                  </Typography>
-                </Stack>
+                    <Stack flex={1} spacing={0.75}>
+                      {isSportsCard ? (
+                        <>
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            alignItems="center"
+                            justifyContent="space-between"
+                          >
+                            <Chip size="small" color="secondary" label={leagueLabel} />
+                            <Typography variant="caption" color="text.secondary">
+                              {kickoffLabel}
+                            </Typography>
+                          </Stack>
+                          {matchup ? (
+                            <Stack spacing={0.25}>
+                              <Typography variant="subtitle1" fontWeight={600}>
+                                {matchup.teamA}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                vs
+                              </Typography>
+                              <Typography variant="subtitle1" fontWeight={600}>
+                                {matchup.teamB}
+                              </Typography>
+                            </Stack>
+                          ) : (
+                            <Typography variant="subtitle2" sx={{ minHeight: 48 }}>
+                              {market.question}
+                            </Typography>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <Typography variant="subtitle2" sx={{ minHeight: 48 }}>
+                            {market.question}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {market.tag || 'General'}
+                          </Typography>
+                        </>
+                      )}
+                    </Stack>
                     <Tooltip title="AI market insight">
                       <IconButton
                         size="small"
@@ -392,56 +474,86 @@ export function WatchlistPanel() {
                         AI
                       </IconButton>
                     </Tooltip>
-                <Tooltip title={isFavorite ? 'Remove from watchlist' : 'Add to watchlist'}>
-                  <IconButton
-                    size="small"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      toggleWatchlist(market.conditionId, !isFavorite);
-                    }}
-                  >
-                    {isFavorite ? (
-                      <StarIcon fontSize="small" color="warning" />
-                    ) : (
-                      <StarOutlineIcon fontSize="small" />
-                    )}
-                  </IconButton>
-                </Tooltip>
-                  </Stack>
-                  <Typography variant="caption" color="text.secondary">
-                    {category.charAt(0).toUpperCase() + category.slice(1)} • Ends in{' '}
-                    {getTimeLeftLabel(market.endDate)}
-                  </Typography>
-                  <Stack direction="row" spacing={1} alignItems="stretch" flexWrap="wrap">
-                    {outcomeOptions.map((option, index) => (
-                      <OutcomeButton
-                        key={`${market.conditionId}-${index}-${option.tokenId ?? option.label}`}
-                        option={option}
-                        active={Boolean(
-                          option.tokenId && option.tokenId === selectedTokenId,
-                        )}
+                    <Tooltip title={isFavorite ? 'Remove from watchlist' : 'Add to watchlist'}>
+                      <IconButton
+                        size="small"
                         onClick={(event) => {
                           event.stopPropagation();
-                          setSelection({
-                            marketId: market.conditionId,
-                            tokenId: option.tokenId ?? market.primaryTokenId,
-                            question: market.question,
-                            outcomeLabel: option.label,
-                            openDepthOverlay: true,
-                            market,
-                          });
+                          toggleWatchlist(market.conditionId, !isFavorite);
                         }}
-                      />
-                    ))}
+                      >
+                        {isFavorite ? (
+                          <StarIcon fontSize="small" color="warning" />
+                        ) : (
+                          <StarOutlineIcon fontSize="small" />
+                        )}
+                      </IconButton>
+                    </Tooltip>
                   </Stack>
+                  <Typography variant="caption" color="text.secondary">
+                    {isSportsCard
+                      ? `Kickoff ${kickoffLabel}`
+                      : `${category.charAt(0).toUpperCase() + category.slice(1)} • Ends in ${
+                          getTimeLeftLabel(market.endDate)
+                        }`}
+                  </Typography>
+                  {isSportsCard ? (
+                    <Stack
+                      direction={{ xs: 'column', sm: 'row' }}
+                      spacing={1}
+                      alignItems="stretch"
+                    >
+                      {outcomeOptions.slice(0, 3).map((option, index) => (
+                        <SportsOutcomePill
+                          key={`${market.conditionId}-sports-${index}-${option.tokenId ?? option.label}`}
+                          option={option}
+                          active={Boolean(option.tokenId && option.tokenId === selectedTokenId)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelection({
+                              marketId: market.conditionId,
+                              tokenId: option.tokenId ?? market.primaryTokenId,
+                              question: market.question,
+                              outcomeLabel: option.label,
+                              openDepthOverlay: true,
+                              market,
+                            });
+                          }}
+                        />
+                      ))}
+                    </Stack>
+                  ) : (
+                    <Stack direction="row" spacing={1} alignItems="stretch" flexWrap="wrap">
+                      {outcomeOptions.map((option, index) => (
+                        <OutcomeButton
+                          key={`${market.conditionId}-${index}-${option.tokenId ?? option.label}`}
+                          option={option}
+                          active={Boolean(option.tokenId && option.tokenId === selectedTokenId)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelection({
+                              marketId: market.conditionId,
+                              tokenId: option.tokenId ?? market.primaryTokenId,
+                              question: market.question,
+                              outcomeLabel: option.label,
+                              openDepthOverlay: true,
+                              market,
+                            });
+                          }}
+                        />
+                      ))}
+                    </Stack>
+                  )}
                   <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap">
-                    <Chip size="small" label={`Spread ${spreadLabel}`} />
+                    <Chip size="small" label={statusLabel} color={statusColor} />
                     <Typography variant="caption" color="text.secondary">
-                      Liquidity {formatLiquidity(market.liquidity)}
+                      {isSportsCard
+                        ? `Spread ${spreadLabel} • Liquidity ${formatLiquidity(market.liquidity)}`
+                        : `Liquidity ${formatLiquidity(market.liquidity)}`}
                     </Typography>
                   </Stack>
-              </Stack>
-            );
+                </Stack>
+              );
             })}
           </Box>
         )}
@@ -574,6 +686,49 @@ function OutcomeButton({ option, active, onClick }: OutcomeButtonProps) {
         </Typography>
         <Typography variant="caption" color="text.secondary">
           {option.price != null ? formatPriceDollars(option.price) : 'Tap to trade'}
+        </Typography>
+      </Stack>
+    </Button>
+  );
+}
+
+type SportsOutcomePillProps = {
+  option: OutcomeButtonOption;
+  active: boolean;
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
+};
+
+function SportsOutcomePill({ option, active, onClick }: SportsOutcomePillProps) {
+  return (
+    <Button
+      onClick={onClick}
+      variant="outlined"
+      size="large"
+      sx={{
+        flex: '1 1 140px',
+        minWidth: 0,
+        borderRadius: 1.5,
+        borderWidth: active ? 2 : 1,
+        borderColor: active ? 'rgba(77,208,225,0.8)' : 'rgba(255,255,255,0.12)',
+        backgroundColor: active ? 'rgba(77,208,225,0.08)' : 'rgba(255,255,255,0.02)',
+        textTransform: 'none',
+        justifyContent: 'flex-start',
+        px: 1.75,
+        py: 1.25,
+        minHeight: 72,
+        alignItems: 'flex-start',
+        '&:hover': {
+          borderColor: 'rgba(77,208,225,0.8)',
+          backgroundColor: 'rgba(77,208,225,0.05)',
+        },
+      }}
+    >
+      <Stack spacing={0.5} alignItems="flex-start">
+        <Typography variant="caption" color="text.secondary">
+          {option.label}
+        </Typography>
+        <Typography variant="h6" fontWeight={600}>
+          {option.price != null ? formatPriceDollars(option.price) : '––'}
         </Typography>
       </Stack>
     </Button>
@@ -728,38 +883,6 @@ function shuffle<T>(input: T[]): T[] {
   return arr;
 }
 
-type SportsLeagueCategory = Exclude<SportsLeagueFilter, 'all'> | 'other';
-
-const SPORTS_KEYWORDS: Record<SportsLeagueCategory, string[]> = {
-  nfl: ['nfl', 'patriots', 'chiefs', 'eagles', 'cowboys', 'vikings', 'jets', 'giants'],
-  nba: ['nba', 'lakers', 'celtics', 'bucks', 'nuggets', 'warriors', 'heat', 'suns', 'knicks', 'mavericks'],
-  nhl: [
-    'nhl',
-    'rangers',
-    'bruins',
-    'maple leafs',
-    'avalanche',
-    'oilers',
-    'blackhawks',
-    'golden knights',
-    'knights',
-    'kings',
-    'lightning',
-    'devils',
-    'red wings',
-    'penguins',
-  ],
-  mlb: ['mlb', 'yankees', 'dodgers', 'braves', 'astros', 'phillies', 'mets', 'orioles', 'giants'],
-  soccer: ['soccer', 'premier league', 'man city', 'arsenal', 'barcelona', 'real madrid', 'mls', 'bundesliga'],
-  cfb: ['cfb', 'college football', 'alabama', 'georgia', 'ohio state', 'notre dame', 'longhorns'],
-  cbb: ['cbb', 'college basketball', 'march madness', 'duke', 'kentucky', 'kansas', 'uconn'],
-  mma: ['mma', 'ufc', 'fight', 'bantamweight', 'featherweight'],
-  golf: ['golf', 'pga', 'masters', 'open championship'],
-  tennis: ['tennis', 'atp', 'wta', 'grand slam', 'wimbledon', 'us open', 'roland garros'],
-  esports: ['esports', 'league of legends', 'cs2', 'valorant', 'dota', 'overwatch'],
-  other: [],
-};
-
 function deriveCategory(market: Market): MarketCategory {
   if (market.category) {
     return market.category;
@@ -796,20 +919,6 @@ function deriveCategory(market: Market): MarketCategory {
     matches(['inflation', 'economy', 'gdp', 'climate', 'war', 'disease', 'hurricane'])
   ) {
     return 'macro';
-  }
-  return 'other';
-}
-
-function deriveSportsLeague(market: Market): SportsLeagueFilter {
-  if (deriveCategory(market) !== 'sports') {
-    return 'other';
-  }
-  const haystack = `${market.question} ${market.tag ?? ''}`.toLowerCase();
-  const leagues = Object.keys(SPORTS_KEYWORDS) as SportsLeagueCategory[];
-  for (const league of leagues) {
-    if (SPORTS_KEYWORDS[league].some((keyword) => haystack.includes(keyword))) {
-      return league;
-    }
   }
   return 'other';
 }

@@ -159,15 +159,15 @@ type SlateOptions = {
   limit?: number;
   lookaheadHours?: number;
   lookbackHours?: number;
+  staleBufferHours?: number;
 };
 
 export async function fetchSportsSlate(options: SlateOptions = {}): Promise<Market[]> {
   const now = options.now ?? Date.now();
   const lookaheadMs = (options.lookaheadHours ?? DEFAULT_LOOKAHEAD_HOURS) * 60 * 60 * 1000;
   const lookbackMs = (options.lookbackHours ?? DEFAULT_LOOKBACK_HOURS) * 60 * 60 * 1000;
-  const windowStart = now - lookbackMs;
-  const windowEnd = now + lookaheadMs;
-  const staleCutoff = now - lookbackMs;
+  const staleBufferMs = (options.staleBufferHours ?? 2) * 60 * 60 * 1000;
+  const staleCutoff = now - staleBufferMs;
   const limit = options.limit ?? Number.POSITIVE_INFINITY;
 
   const metadata = await fetchSportsMetadata();
@@ -204,7 +204,10 @@ export async function fetchSportsSlate(options: SlateOptions = {}): Promise<Mark
           const endTs = resolveEventTimestamp(
             gammaMarket.endDate ?? (gammaMarket as { end_date?: string }).end_date ?? event.endDate,
           );
-          if ((startTs && startTs < windowStart) || (startTs && startTs > windowEnd)) {
+          if (startTs && startTs < now - lookbackMs) {
+            continue;
+          }
+          if (startTs && startTs > now + lookaheadMs) {
             continue;
           }
           if (endTs && endTs < staleCutoff) {
@@ -223,7 +226,7 @@ export async function fetchSportsSlate(options: SlateOptions = {}): Promise<Mark
             market: gammaMarket,
             tag: config.label,
             icon: config.image,
-            start: startTs ?? endTs ?? windowEnd,
+            start: startTs ?? endTs ?? now,
             end: endTs ?? null,
           });
           if (candidates.length >= limit * 2) {

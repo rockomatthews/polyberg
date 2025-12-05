@@ -2,6 +2,7 @@ import type { Market, MarketCategory } from '@/lib/api/types';
 import { clobClient } from '@/lib/polymarket/clobClient';
 import { logger } from '@/lib/logger';
 import { env } from '@/lib/env';
+import { fetchSportsSlate } from '@/lib/polymarket/sportsService';
 import { getLiveMarketOverlay, getLiveMarketSnapshot } from '@/lib/rtds/hub';
 
 type ClobToken = {
@@ -49,6 +50,9 @@ export type GammaMarket = {
   closeDate?: string;
   createdAt?: string;
   updatedAt?: string;
+  active?: boolean;
+  closed?: boolean;
+  acceptingOrders?: boolean;
   tokens?: Array<{
     id?: string;
     tokenId?: string;
@@ -79,6 +83,7 @@ export type GammaMarket = {
   home_team_name?: string;
   away_team_name?: string;
   image?: string | null;
+  groupItemTitle?: string;
 };
 
 type SamplingPayload = {
@@ -123,6 +128,10 @@ export async function loadMarketSnapshots(
 export async function loadSportsMarkets(options: { limit?: number; now?: number } = {}) {
   const limit = clampLimit(Number.isFinite(options.limit) ? Number(options.limit) : 200);
   const now = options.now ?? Date.now();
+  const gammaSlate = await fetchSportsSlate({ limit, now });
+  if (gammaSlate.length >= limit / 2) {
+    return gammaSlate.slice(0, limit);
+  }
   const sourceMarkets = await fetchEligibleMarkets(now);
   const deduped = new Map<string, ClobMarket>();
   sourceMarkets.forEach((market) => {
@@ -140,7 +149,20 @@ export async function loadSportsMarkets(options: { limit?: number; now?: number 
       resolveEventStartTimestamp(b) ?? resolveEndTimestamp(b.end_date_iso ?? b.endDate) ?? Infinity;
     return aStart - bStart;
   });
-  return hydrateMarkets(sorted.slice(0, limit));
+  const hydratedFallback = await hydrateMarkets(sorted.slice(0, limit));
+  if (!gammaSlate.length) {
+    return hydratedFallback;
+  }
+  const merged = [...gammaSlate, ...hydratedFallback];
+  const seen = new Set<string>();
+  const unique: Market[] = [];
+  for (const market of merged) {
+    if (seen.has(market.conditionId)) continue;
+    seen.add(market.conditionId);
+    unique.push(market);
+    if (unique.length >= limit) break;
+  }
+  return unique;
 }
 
 async function hydrateMarkets(markets: ClobMarket[]): Promise<Market[]> {
@@ -649,7 +671,7 @@ function mapGammaMarketToClobMarket(market: GammaMarket): ClobMarket | null {
     tags: normalizedTags.length ? normalizedTags : ['Sports'],
     tokens: parsedTokens,
     enable_order_book: true,
-    active: true,
+    active: market.active ?? true,
     condition_id: conditionId,
     icon: market.image ?? null,
     image: market.image ?? null,
@@ -666,8 +688,8 @@ function mapGammaMarketToClobMarket(market: GammaMarket): ClobMarket | null {
         : (market.liquidity as number | null | undefined) ?? null,
     events: [],
     archived: false,
-    accepting_orders: true,
-    closed: false,
+    accepting_orders: market.acceptingOrders ?? true,
+    closed: market.closed ?? false,
   };
 }
 

@@ -64,6 +64,106 @@ export async function fetchSportsEvent(slug: string): Promise<SportsEvent | null
   return null;
 }
 
+const SPORTS_SEARCH_CONFIG = [
+  { tag: 'NFL', query: 'nfl' },
+  { tag: 'NBA', query: 'nba' },
+  { tag: 'MLB', query: 'mlb' },
+  { tag: 'NHL', query: 'nhl' },
+  { tag: 'NCAAF', query: 'cfb' },
+  { tag: 'NCAAB', query: 'ncaab' },
+  { tag: 'MLS', query: 'mls' },
+  { tag: 'Premier League', query: 'premier league' },
+  { tag: 'UFC', query: 'ufc' },
+  { tag: 'Tennis', query: 'atp' },
+];
+
+const DEFAULT_LOOKAHEAD_HOURS = 72;
+const DEFAULT_LOOKBACK_HOURS = 12;
+
+type SlateOptions = {
+  now?: number;
+  limit?: number;
+  lookaheadHours?: number;
+  lookbackHours?: number;
+};
+
+export async function fetchSportsSlate(options: SlateOptions = {}): Promise<Market[]> {
+  const now = options.now ?? Date.now();
+  const lookaheadMs = (options.lookaheadHours ?? DEFAULT_LOOKAHEAD_HOURS) * 60 * 60 * 1000;
+  const lookbackMs = (options.lookbackHours ?? DEFAULT_LOOKBACK_HOURS) * 60 * 60 * 1000;
+  const windowStart = now - lookbackMs;
+  const windowEnd = now + lookaheadMs;
+  const limit = options.limit ?? Number.POSITIVE_INFINITY;
+
+  const candidates: Array<{ market: GammaMarket; tag: string | null; start: number }> = [];
+
+  await Promise.allSettled(
+    SPORTS_SEARCH_CONFIG.map(async (config) => {
+      try {
+        const events = await fetchSportsEvents(config.query);
+        for (const event of events) {
+          const eventStart = resolveEventTimestamp(
+            event.startTime ?? event.gameStartTime ?? event.eventDate ?? event.start_date ?? null,
+          );
+          for (const gammaMarket of event.markets ?? []) {
+            if (!isHeadToHeadMarket(gammaMarket)) continue;
+            if (!isMarketActive(gammaMarket)) continue;
+            const marketStart =
+              resolveEventTimestamp(
+                gammaMarket.startDate ?? (gammaMarket as { start_date?: string }).start_date ?? gammaMarket.endDate,
+              ) ?? eventStart;
+            if (!marketStart || marketStart < windowStart || marketStart > windowEnd) {
+              continue;
+            }
+            candidates.push({ market: gammaMarket, tag: config.tag, start: marketStart });
+            if (candidates.length >= limit * 2) {
+              return;
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('[sportsSlate] query failed', config.query, error);
+      }
+    }),
+  );
+
+  if (!candidates.length) {
+    return [];
+  }
+
+  const ordered = candidates.sort((a, b) => a.start - b.start);
+  const deduped: Array<{ market: GammaMarket; tag: string | null }> = [];
+  const seen = new Set<string>();
+
+  for (const candidate of ordered) {
+    const key =
+      candidate.market.conditionId ??
+      (candidate.market as { condition_id?: string }).condition_id ??
+      candidate.market.slug ??
+      candidate.market.id;
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push({ market: candidate.market, tag: candidate.tag });
+    if (deduped.length >= limit) {
+      break;
+    }
+  }
+
+  const hydrated = await convertGammaMarketsToMarkets(deduped.map((entry) => entry.market));
+  return hydrated
+    .map(({ market }, index) => ({
+      ...market,
+      tag: deduped[index]?.tag ?? market.tag ?? 'Sports',
+    }))
+    .sort((a, b) => {
+      const aTime = a.endDate ? Date.parse(a.endDate) : Infinity;
+      const bTime = b.endDate ? Date.parse(b.endDate) : Infinity;
+      return aTime - bTime;
+    });
+}
+
 function parseLineValue(value: unknown): number | null {
   if (value == null) {
     return null;
@@ -149,6 +249,25 @@ function pickBestEvent(events: GammaEvent[], normalizedSlug: string): GammaEvent
     ) ??
     null
   );
+}
+
+function resolveEventTimestamp(value?: string | null) {
+  if (!value) return null;
+  const ts = Date.parse(value);
+  return Number.isNaN(ts) ? null : ts;
+}
+
+function isHeadToHeadMarket(market: GammaMarket) {
+  const question = (market.question ?? '').toLowerCase();
+  if (!question) return false;
+  return question.includes(' vs ') || question.includes(' vs.') || question.includes(' @ ');
+}
+
+function isMarketActive(market: GammaMarket) {
+  if ((market as { closed?: boolean }).closed) return false;
+  if ((market as { active?: boolean }).active === false) return false;
+  if ((market as { acceptingOrders?: boolean }).acceptingOrders === false) return false;
+  return true;
 }
 
 async function mapEventToSportsEvent(event: GammaEvent, fallbackSlug: string): Promise<SportsEvent> {

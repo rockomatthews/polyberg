@@ -2,6 +2,7 @@ import type { Market, MarketCategory } from '@/lib/api/types';
 import { clobClient } from '@/lib/polymarket/clobClient';
 import { logger } from '@/lib/logger';
 import { env } from '@/lib/env';
+import { getLiveMarketOverlay, getLiveMarketSnapshot } from '@/lib/rtds/hub';
 
 type ClobToken = {
   token_id?: string;
@@ -155,11 +156,16 @@ async function hydrateMarkets(markets: ClobMarket[]): Promise<Market[]> {
         })) ?? [];
     const primaryToken = market.tokens?.[0];
     const secondaryToken = market.tokens?.[1];
-    const bestBid =
+    const fallbackBestBid =
       primaryToken?.price != null ? Number(primaryToken.price) * 100 : null;
-    const bestAsk =
+    const fallbackBestAsk =
       secondaryToken?.price != null ? Number(secondaryToken.price) * 100 : null;
+    const liveOverlay = getLiveMarketOverlay(market.condition_id);
+    const bestBid = liveOverlay?.bestBidCents ?? fallbackBestBid;
+    const bestAsk = liveOverlay?.bestAskCents ?? fallbackBestAsk;
     const liquidity = resolveLiquidity(market) || null;
+    const status: Market['status'] =
+      liveOverlay?.status ?? (market.closed ? 'resolved' : 'open');
 
     return {
       conditionId: market.condition_id,
@@ -181,6 +187,7 @@ async function hydrateMarkets(markets: ClobMarket[]): Promise<Market[]> {
       liquidity,
       outcomes,
       category,
+      status,
     } satisfies Market;
   });
 }
@@ -268,10 +275,16 @@ async function fetchEligibleMarkets(now: number) {
   const fallbackMarkets =
     samplingMarkets.length === 0 ? ((await clobClient.getMarkets()).data as ClobMarket[]) : [];
   const baseMarkets = samplingMarkets.length ? samplingMarkets : fallbackMarkets;
+  const liveSnapshot = getLiveMarketSnapshot();
   const eligible = baseMarkets.filter((market) => {
     if (!market.active) return false;
     if (market.archived) return false;
     if (market.closed) return false;
+    if (market.accepting_orders === false) return false;
+    const overlay = liveSnapshot.get(market.condition_id);
+    if (overlay?.status === 'resolved') {
+      return false;
+    }
     const endTs = resolveEndTimestamp(market.end_date_iso ?? market.endDate);
     if (endTs && endTs < now - 6 * 60 * 60 * 1000) {
       return false;

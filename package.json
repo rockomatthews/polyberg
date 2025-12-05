@@ -24,6 +24,7 @@
     "@pinecone-database/pinecone": "^4.0.0",
     "@polymarket/builder-relayer-client": "^0.0.6",
     "@polymarket/clob-client": "^4.22.8",
+    "@polymarket/real-time-data-client": "^1.4.0",
     "@tanstack/react-query": "^5.90.10",
     "@tanstack/react-query-devtools": "^5.90.2",
     "@upstash/redis": "^1.35.6",

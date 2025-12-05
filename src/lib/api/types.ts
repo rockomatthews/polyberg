@@ -29,6 +29,7 @@ export type Market = {
   liquidity: number | null;
   outcomes: MarketOutcome[];
   category: MarketCategory;
+  status: 'open' | 'resolved' | 'suspended';
 };
 
 export type OrderBookLevel = {

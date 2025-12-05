@@ -4,6 +4,9 @@ const envSchema = z.object({
   POLYMARKET_API_HOST: z.string().url().default('https://clob.polymarket.com'),
   POLYMARKET_GAMMA_API_HOST: z.string().url().default('https://gamma-api.polymarket.com'),
   POLYMARKET_CHAIN_ID: z.coerce.number().default(137),
+  POLYMARKET_RTDS_URL: z.string().url().default('wss://ws-live-data.polymarket.com'),
+  POLYMARKET_RTDS_ENABLED: z.coerce.boolean().optional(),
+  POLYMARKET_RTDS_PING_MS: z.coerce.number().optional(),
   POLYMARKET_L2_API_KEY: z.string().optional(),
   POLYMARKET_L2_API_SECRET: z.string().optional(),
   POLYMARKET_L2_API_PASSPHRASE: z.string().optional(),
@@ -48,6 +51,9 @@ export const env = {
   polymarketApiHost: data.POLYMARKET_API_HOST,
   gammaApiHost: data.POLYMARKET_GAMMA_API_HOST,
   polymarketChainId: data.POLYMARKET_CHAIN_ID,
+  rtdsUrl: data.POLYMARKET_RTDS_URL,
+  rtdsEnabled: data.POLYMARKET_RTDS_ENABLED ?? true,
+  rtdsPingMs: data.POLYMARKET_RTDS_PING_MS ?? 5000,
   l2ApiCreds:
     data.POLYMARKET_L2_API_KEY && data.POLYMARKET_L2_API_SECRET && data.POLYMARKET_L2_API_PASSPHRASE
       ? {

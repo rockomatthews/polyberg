@@ -213,6 +213,10 @@ export async function POST(request: NextRequest) {
   let safeAddress: string | null = null;
   try {
     safeAddress = await ensureUserSafeReady(session.user.id);
+    logger.info('orders.safe.ready', {
+      userId: session.user.id,
+      safe: safeAddress,
+    });
   } catch (error) {
     if (error instanceof SafeNotReadyError) {
       return NextResponse.json(
@@ -228,6 +232,9 @@ export async function POST(request: NextRequest) {
 
   try {
     await ensureUserTradingCredentials(session.user.id);
+    logger.info('orders.credentials.ready', {
+      userId: session.user.id,
+    });
   } catch (error) {
     if (error instanceof TradingCredentialsError) {
       return NextResponse.json(
@@ -248,6 +255,14 @@ export async function POST(request: NextRequest) {
   try {
     const json = await request.json();
     parsedPayload = tradeSchema.parse(json);
+    logger.info('orders.submit.payload', {
+      userId: session.user.id,
+      marketId: parsedPayload.marketId ?? null,
+      tokenId: parsedPayload.tokenId,
+      side: parsedPayload.side,
+      priceCents: parsedPayload.price,
+      sizeThousands: parsedPayload.size,
+    });
 
     const priceDecimal = parsedPayload.price / 100;
     const normalizedPrice = clampPrice(priceDecimal);
@@ -260,6 +275,11 @@ export async function POST(request: NextRequest) {
       if (safeAddress) {
         const { balance } = await getSafeBalance(safeAddress);
         availableSafeBalance = balance;
+        logger.info('orders.safe.balance', {
+          userId: session.user.id,
+          safe: safeAddress,
+          balance: balance.toFixed(4),
+        });
       }
     } catch (error) {
       if (error instanceof SafeBalanceError) {
@@ -288,6 +308,11 @@ export async function POST(request: NextRequest) {
     ) {
       const formattedRequired = requiredCollateral.toFixed(2);
       const formattedAvailable = availableSafeBalance.toFixed(2);
+      logger.warn('orders.safe.insufficient', {
+        userId: session.user.id,
+        required: formattedRequired,
+        available: formattedAvailable,
+      });
       return NextResponse.json(
         {
           error: `Insufficient Safe balance. Need $${formattedRequired}, available $${formattedAvailable}.`,
@@ -310,6 +335,11 @@ export async function POST(request: NextRequest) {
       OrderType.GTC,
       deferExec,
     );
+    logger.info('orders.submit.posted', {
+      userId: session.user.id,
+      orderId: result?.orderID ?? result?.id ?? null,
+      deferExec,
+    });
 
     const responsePayload = {
       success: true,

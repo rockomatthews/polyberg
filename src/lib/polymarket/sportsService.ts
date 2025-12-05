@@ -16,7 +16,9 @@ type GammaEvent = {
   startTime?: string;
   eventDate?: string;
   gameStartTime?: string;
+  endDate?: string;
   start_date?: string;
+  end_date?: string;
   homeTeamName?: string;
   awayTeamName?: string;
   home_team_name?: string;

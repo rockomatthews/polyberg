@@ -140,7 +140,7 @@ export async function fetchSportsSlate(options: SlateOptions = {}): Promise<Mark
       candidate.market.conditionId ??
       (candidate.market as { condition_id?: string }).condition_id ??
       candidate.market.slug ??
-      candidate.market.id;
+      (candidate.market as { id?: string }).id;
     if (!key || seen.has(key)) {
       continue;
     }

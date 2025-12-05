@@ -419,7 +419,7 @@ async function ensureSportsCoverage(markets: ClobMarket[], now: number) {
   const existingIds = new Set(markets.map((market) => market.condition_id));
   const supplemental: ClobMarket[] = [];
 
-  const slate = await fetchSportsSlate(now, needed, existingIds);
+  const slate = await fetchClobSportsSlate(now, needed, existingIds);
   slate.forEach((market) => existingIds.add(market.condition_id));
   supplemental.push(...slate);
 
@@ -434,7 +434,7 @@ async function ensureSportsCoverage(markets: ClobMarket[], now: number) {
   return [...markets, ...supplemental];
 }
 
-async function fetchSportsSlate(
+async function fetchClobSportsSlate(
   now: number,
   needed: number,
   existingIds: Set<string>,

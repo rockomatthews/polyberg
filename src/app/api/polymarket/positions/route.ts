@@ -5,6 +5,10 @@ import { authOptions } from '@/lib/auth';
 import { ensureTradingClient } from '@/lib/polymarket/tradingClient';
 import { logger } from '@/lib/logger';
 import { fetchAggregatedPositions } from '@/lib/polymarket/positionsService';
+import {
+  ensureUserTradingCredentials,
+  TradingCredentialsError,
+} from '@/lib/services/tradingCredentialsService';
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -13,6 +17,24 @@ export async function GET() {
       { positions: [], meta: { error: 'Not authenticated' } },
       { status: 401 },
     );
+  }
+
+  try {
+    await ensureUserTradingCredentials(session.user.id);
+  } catch (error) {
+    if (error instanceof TradingCredentialsError) {
+      return NextResponse.json(
+        {
+          positions: [],
+          meta: {
+            error: error.message,
+            requiresBuilderSigning: true,
+          },
+        },
+        { status: 409 },
+      );
+    }
+    throw error;
   }
 
   const ensured = await ensureTradingClient(session.user.id);

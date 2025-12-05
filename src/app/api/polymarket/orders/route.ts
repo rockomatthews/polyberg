@@ -17,6 +17,10 @@ import {
   COLLATERAL_TOLERANCE,
 } from '@/lib/trading/collateral';
 import { getSafeBalance, SafeBalanceError } from '@/lib/services/safeBalanceService';
+import {
+  ensureUserTradingCredentials,
+  TradingCredentialsError,
+} from '@/lib/services/tradingCredentialsService';
 
 const tradeSchema = z.object({
   tokenId: z.string().min(1),
@@ -137,6 +141,24 @@ export async function GET() {
     return NextResponse.json({ error: 'Not authenticated', orders: [] }, { status: 401 });
   }
 
+  try {
+    await ensureUserTradingCredentials(session.user.id);
+  } catch (error) {
+    if (error instanceof TradingCredentialsError) {
+      return NextResponse.json(
+        {
+          orders: [],
+          meta: {
+            error: error.message,
+            requiresBuilderSigning: true,
+          },
+        },
+        { status: 409 },
+      );
+    }
+    throw error;
+  }
+
   const ensured = await ensureTradingClient(session.user.id);
   if (!('client' in ensured)) {
     return NextResponse.json(
@@ -198,6 +220,18 @@ export async function POST(request: NextRequest) {
           error: error.message,
           safe: error.payload,
         },
+        { status: 409 },
+      );
+    }
+    throw error;
+  }
+
+  try {
+    await ensureUserTradingCredentials(session.user.id);
+  } catch (error) {
+    if (error instanceof TradingCredentialsError) {
+      return NextResponse.json(
+        { error: error.message, code: 'TRADING_CREDENTIALS_MISSING' },
         { status: 409 },
       );
     }

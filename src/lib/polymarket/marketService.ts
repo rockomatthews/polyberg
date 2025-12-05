@@ -129,8 +129,9 @@ export async function loadSportsMarkets(options: { limit?: number; now?: number 
   const limit = clampLimit(Number.isFinite(options.limit) ? Number(options.limit) : 200);
   const now = options.now ?? Date.now();
   const gammaSlate = await fetchSportsSlate({ limit, now });
-  if (gammaSlate.length >= limit / 2) {
-    return gammaSlate.slice(0, limit);
+  const recentGamma = gammaSlate.filter((market) => isUpcomingMarket(market, now));
+  if (recentGamma.length >= limit / 2) {
+    return recentGamma.slice(0, limit);
   }
   const sourceMarkets = await fetchEligibleMarkets(now);
   const deduped = new Map<string, ClobMarket>();
@@ -150,10 +151,11 @@ export async function loadSportsMarkets(options: { limit?: number; now?: number 
     return aStart - bStart;
   });
   const hydratedFallback = await hydrateMarkets(sorted.slice(0, limit));
-  if (!gammaSlate.length) {
-    return hydratedFallback;
+  const recentFallback = hydratedFallback.filter((market) => isUpcomingMarket(market, now));
+  if (!recentGamma.length) {
+    return recentFallback;
   }
-  const merged = [...gammaSlate, ...hydratedFallback];
+  const merged = [...recentGamma, ...recentFallback];
   const seen = new Set<string>();
   const unique: Market[] = [];
   for (const market of merged) {
@@ -163,6 +165,18 @@ export async function loadSportsMarkets(options: { limit?: number; now?: number 
     if (unique.length >= limit) break;
   }
   return unique;
+}
+
+function isUpcomingMarket(market: Market, now: number) {
+  if (!market.endDate) {
+    return true;
+  }
+  const timestamp = Date.parse(market.endDate);
+  if (Number.isNaN(timestamp)) {
+    return true;
+  }
+  const cutoff = now - 2 * 60 * 60 * 1000;
+  return timestamp >= cutoff;
 }
 
 async function hydrateMarkets(markets: ClobMarket[]): Promise<Market[]> {

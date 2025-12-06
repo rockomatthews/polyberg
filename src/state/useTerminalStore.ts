@@ -4,7 +4,7 @@ import type { Market } from '@/lib/api/types';
 
 type ExecutionMode = 'aggressive' | 'passive';
 
-type TerminalState = {
+export type TerminalState = {
   selectedMarketId: string | null;
   selectedTokenId: string | null;
   selectedMarketQuestion: string | null;

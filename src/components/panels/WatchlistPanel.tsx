@@ -22,7 +22,7 @@ import StarIcon from '@mui/icons-material/Star';
 
 import { PanelCard } from './PanelCard';
 import { useMarketsData, useSportsMarketsData } from '@/hooks/useTerminalData';
-import { useTerminalStore } from '@/state/useTerminalStore';
+import { useTerminalStore, type TerminalState } from '@/state/useTerminalStore';
 import { useUserWatchlist } from '@/hooks/useWatchlist';
 import type { Market, MarketCategory, SportsEventGroup, SportsMarketVariant } from '@/lib/api/types';
 
@@ -612,7 +612,7 @@ type SportsEventCardProps = {
   watchlist: string[];
   toggleWatchlist: (conditionId: string, shouldWatch: boolean) => void;
   selectedTokenId: string | null;
-  setSelection: ReturnType<typeof useTerminalStore>['setSelection'];
+  setSelection: TerminalState['setSelection'];
 };
 
 function SportsEventCard({
@@ -692,7 +692,7 @@ type SportsVariantRowProps = {
   group: SportsEventGroup;
   variant: SportsMarketVariant;
   selectedTokenId: string | null;
-  setSelection: ReturnType<typeof useTerminalStore>['setSelection'];
+  setSelection: TerminalState['setSelection'];
 };
 
 function SportsVariantRow({

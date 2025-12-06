@@ -76,6 +76,39 @@ function extractOrderErrorMessage(error: unknown): string {
   return fallthrough;
 }
 
+function resolveBuilderError(payload: unknown): string | null {
+  if (!payload) {
+    return 'Builder relayer returned an empty response';
+  }
+  if (typeof payload !== 'object') {
+    return null;
+  }
+  const maybeError = (payload as { error?: unknown }).error;
+  if (maybeError) {
+    if (typeof maybeError === 'string') {
+      return maybeError;
+    }
+    if (maybeError instanceof Error && maybeError.message) {
+      return maybeError.message;
+    }
+    try {
+      return JSON.stringify(maybeError);
+    } catch {
+      return 'Builder relayer rejected the order';
+    }
+  }
+  if ('success' in payload && (payload as { success?: unknown }).success === false) {
+    return 'Builder relayer rejected the order';
+  }
+  if ('status' in payload) {
+    const status = (payload as { status?: unknown }).status;
+    if (typeof status === 'number' && status >= 400) {
+      return `Builder relayer responded with status ${status}`;
+    }
+  }
+  return null;
+}
+
 function extractMessageFromData(data: unknown): string | undefined {
   if (!data) {
     return undefined;
@@ -372,6 +405,19 @@ export async function POST(request: NextRequest) {
         deferExec,
       );
     }
+
+    const builderError = resolveBuilderError(result);
+    if (builderError) {
+      logger.error('orders.submit.builderError', {
+        userId: session.user.id,
+        tokenId: parsedPayload.tokenId,
+        execution: isMarketOrder ? 'market' : 'limit',
+        message: builderError,
+        response: typeof result === 'object' ? result : String(result),
+      });
+      throw new Error(builderError);
+    }
+
     logger.info('orders.submit.posted', {
       userId: session.user.id,
       orderId: result?.orderID ?? result?.id ?? null,

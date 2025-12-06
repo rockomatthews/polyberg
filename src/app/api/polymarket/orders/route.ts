@@ -268,7 +268,8 @@ export async function POST(request: NextRequest) {
     const normalizedPrice = clampPrice(priceDecimal);
     const limitPrice = Number(normalizedPrice.toFixed(3)); // clamp float noise before relayer call
     const sizeInContracts = parsedPayload.size * 1_000; // slider is expressed in "k"
-    const deferExec = parsedPayload.executionMode === 'passive';
+    const isMarketOrder = parsedPayload.executionMode === 'aggressive';
+    const deferExec = !isMarketOrder && parsedPayload.executionMode === 'passive';
 
     let availableSafeBalance: number | null = null;
     try {
@@ -324,20 +325,57 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await ensured.client.createAndPostOrder(
-      {
-        tokenID: parsedPayload.tokenId,
-        price: limitPrice,
-        size: sizeInContracts,
+    let result;
+    if (isMarketOrder) {
+      const marketAmount =
+        parsedPayload.side === Side.BUY
+          ? Number(requiredCollateral.toFixed(4))
+          : sizeInContracts;
+      logger.info('orders.market.submit', {
+        userId: session.user.id,
+        tokenId: parsedPayload.tokenId,
+        marketAmount,
         side: parsedPayload.side,
-      },
-      undefined,
-      OrderType.GTC,
-      deferExec,
-    );
+        price: limitPrice,
+        orderType: 'market',
+      });
+      result = await ensured.client.createAndPostMarketOrder(
+        {
+          tokenID: parsedPayload.tokenId,
+          price: limitPrice,
+          amount: marketAmount,
+          side: parsedPayload.side,
+        },
+        undefined,
+        OrderType.FOK,
+        false,
+      );
+    } else {
+      logger.info('orders.limit.submit', {
+        userId: session.user.id,
+        tokenId: parsedPayload.tokenId,
+        sizeInContracts,
+        side: parsedPayload.side,
+        price: limitPrice,
+        orderType: 'limit',
+        deferExec,
+      });
+      result = await ensured.client.createAndPostOrder(
+        {
+          tokenID: parsedPayload.tokenId,
+          price: limitPrice,
+          size: sizeInContracts,
+          side: parsedPayload.side,
+        },
+        undefined,
+        OrderType.GTC,
+        deferExec,
+      );
+    }
     logger.info('orders.submit.posted', {
       userId: session.user.id,
       orderId: result?.orderID ?? result?.id ?? null,
+      execution: isMarketOrder ? 'market' : 'limit',
       deferExec,
     });
 

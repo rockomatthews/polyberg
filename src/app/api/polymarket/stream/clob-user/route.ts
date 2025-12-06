@@ -24,16 +24,17 @@ export async function GET(request: NextRequest) {
   if (!session?.user?.id) {
     return new Response('Unauthorized', { status: 401 });
   }
+  const userId = session.user.id;
 
   let creds;
   try {
-    creds = await ensureUserTradingCredentials(session.user.id);
+    creds = await ensureUserTradingCredentials(userId);
   } catch (error) {
     if (error instanceof TradingCredentialsError) {
       return new Response(error.message, { status: 409 });
     }
     logger.error('stream.clobUser.credentialsFailed', {
-      userId: session.user.id,
+      userId,
       error: error instanceof Error ? error.message : String(error),
     });
     return new Response('Unable to provision trading credentials', { status: 500 });
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest) {
     const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
     return writer.write(encoder.encode(payload)).catch((error) => {
       logger.warn('stream.clobUser.writeFailed', {
-        userId: session.user.id,
+        userId,
         event,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
       client?.disconnect();
     } catch (error) {
       logger.warn('stream.clobUser.disconnectFailed', {
-        userId: session.user.id,
+        userId,
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -112,7 +113,7 @@ export async function GET(request: NextRequest) {
         });
       } catch (error) {
         logger.error('stream.clobUser.subscribeFailed', {
-          userId: session.user.id,
+          userId,
           error: error instanceof Error ? error.message : String(error),
         });
         void sendEvent('error', { message: 'Subscription failed' });

@@ -1,6 +1,10 @@
 import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { RealTimeDataClient, type Message } from '@polymarket/real-time-data-client';
+import {
+  ConnectionStatus,
+  RealTimeDataClient,
+  type Message,
+} from '@polymarket/real-time-data-client';
 
 import { authOptions } from '@/lib/auth';
 import { env } from '@/lib/env';
@@ -133,7 +137,13 @@ export async function GET(request: NextRequest) {
       void sendEvent(eventName, payload);
     },
     onStatusChange: (status) => {
-      void sendEvent('status', { state: status, connected: status === 'connected', ts: Date.now() });
+      const isConnected =
+        status === ConnectionStatus.CONNECTED || status === 'connected' || status === 'CONNECTED';
+      void sendEvent('status', {
+        state: status,
+        connected: isConnected,
+        ts: Date.now(),
+      });
     },
   });
 

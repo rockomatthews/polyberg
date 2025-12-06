@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import Alert from '@mui/material/Alert';
+import Chip from '@mui/material/Chip';
 import LinearProgress from '@mui/material/LinearProgress';
 import Skeleton from '@mui/material/Skeleton';
 import Stack from '@mui/material/Stack';
@@ -9,6 +10,7 @@ import Typography from '@mui/material/Typography';
 
 import { PanelCard } from './PanelCard';
 import { usePositionsData } from '@/hooks/useTerminalData';
+import { useClobUserFeedStore } from '@/state/useClobUserFeedStore';
 
 const SAMPLE_POSITIONS = [
   { market: 'Will BTC hit $100k by 2025?', exposure: 275_000, pnl: 42_000, delta: 'Long' as const },
@@ -18,6 +20,7 @@ const SAMPLE_POSITIONS = [
 
 export function PositionsPanel() {
   const { data, isLoading } = usePositionsData();
+  const streamingConnected = useClobUserFeedStore((state) => state.connected);
   const positions = data?.positions ?? [];
   const meta = data?.meta;
   const showSample = !positions.length && Boolean(meta?.error);
@@ -25,6 +28,17 @@ export function PositionsPanel() {
 
   return (
     <PanelCard title="Positions" subtitle="PnL" minHeight={240}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+        <Typography variant="caption" color="text.secondary">
+          Builder exposure
+        </Typography>
+        <Chip
+          size="small"
+          variant="outlined"
+          label={streamingConnected ? 'Live via RTDS' : 'Polling'}
+          color={streamingConnected ? 'success' : 'default'}
+        />
+      </Stack>
       {meta?.error ? (
         <Alert severity="warning" variant="outlined" sx={{ mb: 2 }}>
           {meta.error}

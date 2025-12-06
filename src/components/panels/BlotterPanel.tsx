@@ -9,7 +9,8 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 
 import { PanelCard } from './PanelCard';
-import { useOrdersData } from '@/hooks/useTerminalData';
+import { useMarketsData, useOrdersData } from '@/hooks/useTerminalData';
+import { useClobUserFeedStore } from '@/state/useClobUserFeedStore';
 
 const statusColor: Record<string, 'success' | 'warning' | 'default'> = {
   FILLED: 'success',
@@ -24,12 +25,65 @@ const SAMPLE_ORDERS = [
   { id: 'sample-3', market: 'Democrats win Senate', side: 'Buy', price: 63.1, size: 32_000, status: 'FILLED' },
 ] as const;
 
+const formatPrice = (value: number | null) => {
+  if (value == null) {
+    return '––';
+  }
+  return `${(value / 100).toFixed(2)}¢`;
+};
+
+const formatSize = (value: number | null) => {
+  if (value == null) {
+    return '––';
+  }
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(2)}M`;
+  }
+  if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(2)}k`;
+  }
+  return value.toLocaleString();
+};
+
+const formatTimestamp = (value: number | null) => {
+  if (!value) {
+    return '––';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '––';
+  }
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+};
+
 export function BlotterPanel() {
   const { data, isLoading } = useOrdersData();
+  const { data: markets } = useMarketsData();
+  const recentTrades = useClobUserFeedStore((state) => state.recentTrades);
+  const recentOrders = useClobUserFeedStore((state) => state.recentOrders);
+  const streamingConnected = useClobUserFeedStore((state) => state.connected);
   const orders = data?.orders ?? [];
   const meta = data?.meta;
   const showSample = !orders.length && Boolean(meta?.error);
   const dataToRender = showSample ? SAMPLE_ORDERS : orders;
+
+  const marketLookup = React.useMemo(() => {
+    const mapping = new Map<string, string>();
+    markets?.forEach((market) => {
+      mapping.set(market.conditionId, market.question);
+    });
+    return mapping;
+  }, [markets]);
+
+  const resolveMarketLabel = React.useCallback(
+    (marketId: string | null) => {
+      if (!marketId) {
+        return 'Unknown market';
+      }
+      return marketLookup.get(marketId) ?? marketId;
+    },
+    [marketLookup],
+  );
 
   return (
     <PanelCard title="Order Blotter" subtitle="Live">
@@ -43,6 +97,55 @@ export function BlotterPanel() {
           Showing sample blotter fills until builder credentials are connected.
         </Alert>
       ) : null}
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+        <Typography variant="caption" color="text.secondary">
+          Live fills
+        </Typography>
+        <Chip
+          size="small"
+          label={streamingConnected ? 'RTDS connected' : 'Awaiting RTDS'}
+          color={streamingConnected ? 'success' : 'default'}
+          variant="outlined"
+        />
+      </Stack>
+
+      {recentTrades.length ? (
+        <Stack spacing={1.25} sx={{ mb: 2 }}>
+          {recentTrades.map((trade) => (
+            <Stack key={trade.id} spacing={0.25}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Typography variant="subtitle2">{resolveMarketLabel(trade.marketId)}</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {formatTimestamp(trade.timestamp)}
+                </Typography>
+              </Stack>
+              <Typography variant="caption" color="text.secondary">
+                {trade.side ?? 'BUY'} {formatSize(trade.size)} @ {formatPrice(trade.priceCents)}
+                {trade.transactionHash ? ` • ${trade.transactionHash.slice(0, 6)}` : ''}
+              </Typography>
+            </Stack>
+          ))}
+        </Stack>
+      ) : (
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 2 }}>
+          {streamingConnected ? 'Listening for trade fills…' : 'Authenticating live trade stream…'}
+        </Typography>
+      )}
+
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+        <Typography variant="caption" color="text.secondary">
+          Resting orders
+        </Typography>
+        {recentOrders.length ? (
+          <Chip
+            size="small"
+            variant="outlined"
+            label={`${recentOrders.length} live`}
+            color="info"
+          />
+        ) : null}
+      </Stack>
+
       {isLoading && !orders.length ? (
         <Skeleton variant="rounded" height={140} />
       ) : dataToRender.length ? (

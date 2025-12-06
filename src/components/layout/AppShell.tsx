@@ -22,6 +22,7 @@ import { AlertsPanel } from '../panels/AlertsPanel';
 import { ActivityPanel } from '../panels/ActivityPanel';
 import { TradeTicketPanel } from '../panels/TradeTicketPanel';
 import { useTerminalStore } from '@/state/useTerminalStore';
+import { ClobUserFeedBridge } from '../providers/ClobUserFeedBridge';
 
 export function AppShell() {
   const [positionsOpen, setPositionsOpen] = React.useState(false);
@@ -31,7 +32,9 @@ export function AppShell() {
   const selectedMarketId = useTerminalStore((state) => state.selectedMarketId);
 
   return (
-    <Box
+    <>
+      <ClobUserFeedBridge />
+      <Box
       sx={{
         minHeight: '100vh',
         bgcolor: 'background.default',
@@ -195,7 +198,8 @@ export function AppShell() {
           Live Order Blotter
         </Button>
       </Box>
-    </Box>
+      </Box>
+    </>
   );
 }
 

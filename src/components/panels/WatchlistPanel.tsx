@@ -317,10 +317,12 @@ export function WatchlistPanel() {
             <Box
               sx={{
                 display: 'grid',
-                gap: 1.5,
+                gap: 1.25,
                 gridTemplateColumns: {
                   xs: '1fr',
-                  lg: 'repeat(2, minmax(0, 1fr))',
+                  sm: 'repeat(2, minmax(0, 1fr))',
+                  lg: 'repeat(3, minmax(0, 1fr))',
+                  xl: 'repeat(4, minmax(0, 1fr))',
                 },
               }}
             >
@@ -636,10 +638,10 @@ function SportsEventCard({
     <Stack
       spacing={1.5}
       sx={{
-        p: 1.5,
-        borderRadius: 1.2,
-        border: '1px solid rgba(255,255,255,0.06)',
-        backgroundColor: 'rgba(0,0,0,0.2)',
+        p: 1.25,
+        borderRadius: 1.1,
+        border: '1px solid rgba(255,255,255,0.08)',
+        backgroundColor: 'rgba(10,12,16,0.85)',
       }}
     >
       <Stack direction="row" alignItems="center" justifyContent="space-between">
@@ -665,15 +667,17 @@ function SportsEventCard({
           </Tooltip>
         </Stack>
       </Stack>
-      <Stack spacing={0.5}>
-        <Typography variant="h6">{matchupLabel}</Typography>
+        <Stack spacing={0.25}>
+          <Typography variant="subtitle1" fontWeight={600}>
+            {matchupLabel}
+          </Typography>
         {group.homeTeam && group.awayTeam ? (
           <Typography variant="caption" color="text.secondary">
             {group.homeTeam} vs {group.awayTeam}
           </Typography>
         ) : null}
       </Stack>
-      <Stack spacing={1}>
+      <Stack spacing={0.75}>
         {group.variants.map((variant) => (
           <SportsVariantRow
             key={variant.id}
@@ -712,7 +716,7 @@ function SportsVariantRow({
       <Typography variant="caption" color="text.secondary">
         {rowLabel}
       </Typography>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={0.75}>
         {options.map((option) => (
           <SportsOutcomeButton
             key={`${variant.id}-${option.label}`}
@@ -749,18 +753,18 @@ function SportsOutcomeButton({ option, active, onClick }: SportsOutcomeButtonPro
       variant="outlined"
       size="medium"
       sx={{
-        flex: '1 1 140px',
+        flex: '1 1 120px',
         minWidth: 0,
-        borderRadius: 1.2,
+        borderRadius: 1,
         borderWidth: active ? 2 : 1,
         borderColor: palette.border,
         color: palette.text,
         backgroundColor: active ? palette.background : 'rgba(255,255,255,0.02)',
         textTransform: 'none',
         justifyContent: 'space-between',
-        px: 1.5,
-        py: 1,
-        minHeight: 56,
+        px: 1,
+        py: 0.75,
+        minHeight: 48,
         '&:hover': {
           borderColor: palette.hoverBorder,
           backgroundColor: palette.hoverBackground,

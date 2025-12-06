@@ -392,7 +392,15 @@ function normalizeMarketTypeLabel(value?: string | null, question?: string | nul
   if (haystack.includes('spread') || haystack.includes('handicap')) {
     return 'spread';
   }
-  if (haystack.includes('moneyline') || haystack.includes('money line') || haystack.includes('ml')) {
+  if (
+    haystack.includes('moneyline') ||
+    haystack.includes('money line') ||
+    haystack.includes('ml') ||
+    haystack.includes('win?') ||
+    haystack.includes('wins?') ||
+    haystack.includes('vs.') ||
+    haystack.includes(' vs ')
+  ) {
     return 'moneyline';
   }
   return value ?? null;
@@ -567,14 +575,14 @@ function formatLeagueLabel(slug: string) {
 }
 
 async function fetchEventsForLeague(config: LeagueConfig): Promise<GammaEvent[]> {
-  if (config.tagId) {
-    const events = await fetchGammaEvents('tag_id', config.tagId);
+  if (config.seriesId) {
+    const events = await fetchGammaEvents('series_id', config.seriesId);
     if (events.length) {
       return events;
     }
   }
-  if (config.seriesId) {
-    const events = await fetchGammaEvents('series_id', config.seriesId);
+  if (config.tagId) {
+    const events = await fetchGammaEvents('tag_id', config.tagId);
     if (events.length) {
       return events;
     }

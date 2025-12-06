@@ -137,8 +137,7 @@ export async function GET(request: NextRequest) {
       void sendEvent(eventName, payload);
     },
     onStatusChange: (status) => {
-      const isConnected =
-        status === ConnectionStatus.CONNECTED || status === 'connected' || status === 'CONNECTED';
+      const isConnected = status === ConnectionStatus.CONNECTED;
       void sendEvent('status', {
         state: status,
         connected: isConnected,

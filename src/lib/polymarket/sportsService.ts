@@ -1,5 +1,5 @@
 import { env } from '@/lib/env';
-import type { Market } from '@/lib/api/types';
+import type { Market, SportsEventGroup, SportsMarketVariant } from '@/lib/api/types';
 import {
   convertGammaMarketsToMarkets,
   type GammaMarket,
@@ -65,6 +65,27 @@ export type SportsEvent = {
   homeTeam: string | null;
   awayTeam: string | null;
   markets: SportsEventMarket[];
+};
+
+type SlateCandidateMeta = {
+  tag: string;
+  leagueSlug: string;
+  icon: string | null;
+  start: number;
+  end: number | null;
+  eventSlug: string | null;
+  eventStart: string | null;
+  groupLabel: string | null;
+  groupId: string;
+  homeTeam: string | null;
+  awayTeam: string | null;
+  marketType: string | null;
+  line: number | null;
+};
+
+type SportsSlateEntry = {
+  pair: { source: GammaMarket; market: Market };
+  meta: SlateCandidateMeta;
 };
 
 export async function fetchSportsEvent(slug: string): Promise<SportsEvent | null> {
@@ -162,11 +183,13 @@ type SlateOptions = {
   staleBufferHours?: number;
 };
 
-export async function fetchSportsSlate(options: SlateOptions = {}): Promise<Market[]> {
+export async function fetchSportsSlate(options: SlateOptions = {}): Promise<SportsSlateEntry[]> {
   const now = options.now ?? Date.now();
   const lookaheadMs = (options.lookaheadHours ?? DEFAULT_LOOKAHEAD_HOURS) * 60 * 60 * 1000;
   const lookbackMs = (options.lookbackHours ?? DEFAULT_LOOKBACK_HOURS) * 60 * 60 * 1000;
   const staleBufferMs = (options.staleBufferHours ?? 2) * 60 * 60 * 1000;
+  const earliestAllowed = now - lookbackMs;
+  const latestAllowed = now + lookaheadMs;
   const staleCutoff = now - staleBufferMs;
   const limit = options.limit ?? Number.POSITIVE_INFINITY;
 
@@ -176,8 +199,7 @@ export async function fetchSportsSlate(options: SlateOptions = {}): Promise<Mark
   }
 
   const prioritized = prioritizeLeagues(metadata);
-  const candidates: Array<{ market: GammaMarket; tag: string; icon: string | null; start: number; end: number | null }> =
-    [];
+  const candidates: Array<SlateCandidateMeta & { market: GammaMarket }> = [];
   const seen = new Set<string>();
   let shouldStop = false;
 
@@ -191,9 +213,9 @@ export async function fetchSportsSlate(options: SlateOptions = {}): Promise<Mark
         continue;
       }
       for (const event of events) {
-        const eventStart = resolveEventTimestamp(
-          event.startTime ?? event.gameStartTime ?? event.eventDate ?? event.start_date ?? null,
-        );
+        const eventStartStr =
+          event.startTime ?? event.gameStartTime ?? event.eventDate ?? event.start_date ?? null;
+        const eventStart = resolveEventTimestamp(eventStartStr);
         for (const gammaMarket of event.markets ?? []) {
           if (!isHeadToHeadMarket(gammaMarket)) continue;
           if (!isMarketActive(gammaMarket)) continue;
@@ -204,10 +226,7 @@ export async function fetchSportsSlate(options: SlateOptions = {}): Promise<Mark
           const endTs = resolveEventTimestamp(
             gammaMarket.endDate ?? (gammaMarket as { end_date?: string }).end_date ?? event.endDate,
           );
-          if (startTs && startTs < now - lookbackMs) {
-            continue;
-          }
-          if (startTs && startTs > now + lookaheadMs) {
+          if ((startTs && startTs < earliestAllowed) || (startTs && startTs > latestAllowed)) {
             continue;
           }
           if (endTs && endTs < staleCutoff) {
@@ -222,14 +241,46 @@ export async function fetchSportsSlate(options: SlateOptions = {}): Promise<Mark
             continue;
           }
           seen.add(conditionId);
+          const eventSlug = event.slug ?? conditionId;
+          const groupLabel =
+            event.title ?? event.name ?? gammaMarket.groupItemTitle ?? config.label ?? 'Sports';
+          const homeTeam =
+            event.homeTeamName ??
+            event.home_team_name ??
+            gammaMarket.homeTeamName ??
+            gammaMarket.home_team_name ??
+            null;
+          const awayTeam =
+            event.awayTeamName ??
+            event.away_team_name ??
+            gammaMarket.awayTeamName ??
+            gammaMarket.away_team_name ??
+            null;
+          const marketType = normalizeMarketTypeLabel(
+            gammaMarket.sportsMarketType ?? (gammaMarket as { marketType?: string }).marketType,
+            gammaMarket.question,
+          );
+          const line = parseLineValue(
+            gammaMarket.line ?? (gammaMarket as { line?: number | string | null }).line ?? null,
+          );
+
           candidates.push({
             market: gammaMarket,
             tag: config.label,
-            icon: config.image,
-            start: startTs ?? endTs ?? now,
+            leagueSlug: config.slug,
+            icon: event.image ?? config.image ?? gammaMarket.image ?? null,
+            start: startTs ?? eventStart ?? now,
             end: endTs ?? null,
+            eventSlug,
+            eventStart: eventStartStr,
+            groupLabel,
+            groupId: `${config.slug}:${eventSlug}`,
+            homeTeam,
+            awayTeam,
+            marketType,
+            line,
           });
-          if (candidates.length >= limit * 2) {
+          if (candidates.length >= limit * 6) {
             shouldStop = true;
             break;
           }
@@ -248,22 +299,75 @@ export async function fetchSportsSlate(options: SlateOptions = {}): Promise<Mark
   }
 
   const ordered = candidates.sort((a, b) => a.start - b.start);
-  const trimmed = ordered.slice(0, limit);
+  const trimmed = ordered.slice(0, limit * 6);
   const hydrated = await convertGammaMarketsToMarkets(trimmed.map((entry) => entry.market));
-  return hydrated
-    .map(({ market }, index) => {
-      const meta = trimmed[index];
-      return {
-        ...market,
-        tag: meta?.tag ?? market.tag ?? 'Sports',
-        icon: meta?.icon ?? market.icon,
-      };
-    })
+  return hydrated.map((pair, index) => ({
+    pair,
+    meta: trimmed[index],
+  }));
+}
+
+export async function loadSportsEventGroups(
+  options: { limit?: number; now?: number } = {},
+): Promise<SportsEventGroup[]> {
+  const limit = Number.isFinite(options.limit) ? Number(options.limit) : 200;
+  const now = options.now ?? Date.now();
+  const slate = await fetchSportsSlate({ limit, now });
+  if (!slate.length) {
+    return [];
+  }
+  const groups = new Map<string, SportsEventGroup>();
+
+  for (const entry of slate) {
+    const { pair, meta } = entry;
+    if (!groups.has(meta.groupId)) {
+      const startTime = meta.eventStart ?? pair.market.endDate ?? null;
+      const startTs = startTime ? Date.parse(startTime) : meta.start;
+      const endTs = meta.end ?? (startTs ? startTs + 3 * 60 * 60 * 1000 : null);
+      const status: SportsEventGroup['status'] =
+        startTs && startTs <= now && (!endTs || endTs >= now)
+          ? 'live'
+          : endTs && endTs < now
+            ? 'closed'
+            : 'upcoming';
+
+      groups.set(meta.groupId, {
+        id: meta.groupId,
+        league: meta.tag,
+        leagueSlug: meta.leagueSlug,
+        icon: meta.icon,
+        title: meta.groupLabel ?? pair.market.question,
+        startTime,
+        status,
+        homeTeam: meta.homeTeam,
+        awayTeam: meta.awayTeam,
+        tag: meta.tag,
+        variants: [],
+      });
+    }
+    const variant: SportsMarketVariant = {
+      id: pair.market.conditionId,
+      label: pair.market.question,
+      marketType: meta.marketType,
+      line: meta.line,
+      market: pair.market,
+    };
+    groups.get(meta.groupId)!.variants.push(variant);
+  }
+
+  const prioritized = Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      variants: orderVariants(group.variants),
+    }))
     .sort((a, b) => {
-      const aTime = a.endDate ? Date.parse(a.endDate) : Number.MAX_SAFE_INTEGER;
-      const bTime = b.endDate ? Date.parse(b.endDate) : Number.MAX_SAFE_INTEGER;
+      const aTime = a.startTime ? Date.parse(a.startTime) : Number.MAX_SAFE_INTEGER;
+      const bTime = b.startTime ? Date.parse(b.startTime) : Number.MAX_SAFE_INTEGER;
       return aTime - bTime;
-    });
+    })
+    .slice(0, limit);
+
+  return prioritized;
 }
 
 function parseLineValue(value: unknown): number | null {
@@ -277,6 +381,36 @@ function parseLineValue(value: unknown): number | null {
         ? value
         : Number((value as { line?: string })?.line ?? NaN);
   return Number.isFinite(numeric) ? Number(numeric.toFixed(2)) : null;
+}
+
+function normalizeMarketTypeLabel(value?: string | null, question?: string | null) {
+  const base = value?.toLowerCase() ?? '';
+  const haystack = `${base} ${question ?? ''}`.toLowerCase();
+  if (haystack.includes('over') || haystack.includes('under') || haystack.includes('o/u') || haystack.includes('total')) {
+    return 'total';
+  }
+  if (haystack.includes('spread') || haystack.includes('handicap')) {
+    return 'spread';
+  }
+  if (haystack.includes('moneyline') || haystack.includes('money line') || haystack.includes('ml')) {
+    return 'moneyline';
+  }
+  return value ?? null;
+}
+
+const VARIANT_ORDER = ['moneyline', 'spread', 'total'];
+
+function orderVariants(variants: SportsMarketVariant[]) {
+  return [...variants].sort((a, b) => {
+    const aIndex = VARIANT_ORDER.indexOf((a.marketType ?? '').toLowerCase());
+    const bIndex = VARIANT_ORDER.indexOf((b.marketType ?? '').toLowerCase());
+    if (aIndex === -1 && bIndex === -1) {
+      return (a.line ?? 0) - (b.line ?? 0);
+    }
+    if (aIndex === -1) return 1;
+    if (bIndex === -1) return -1;
+    return aIndex - bIndex;
+  });
 }
 
 function extractLeague(event: GammaEvent): string | null {

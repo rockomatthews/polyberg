@@ -6,6 +6,7 @@ import {
   OrderBookSnapshot,
   OrdersResponse,
   Position,
+  SportsEventGroup,
   SystemStatus,
 } from './types';
 import { getCached, setCached, redisClient } from '@/lib/redis';
@@ -50,23 +51,23 @@ export async function fetchMarkets(): Promise<Market[]> {
   }
 }
 
-export async function fetchSportsMarkets(): Promise<Market[]> {
+export async function fetchSportsMarkets(): Promise<SportsEventGroup[]> {
   try {
-    const cached = await getCached<Market[]>('markets:sports:latest');
+    const cached = await getCached<SportsEventGroup[]>('sports:slate:latest');
     if (cached?.length) {
       return cached;
     }
   } catch (error) {
-    console.warn('[cache] read sports markets failed', error);
+    console.warn('[cache] read sports slate failed', error);
   }
   try {
-    const data = await apiGet<{ markets: Market[] }>('/api/polymarket/sports?limit=250');
-    if (data.markets?.length) {
-      setCached('markets:sports:latest', data.markets, 5).catch((err) =>
-        console.warn('[cache] set sports markets failed', err),
+    const data = await apiGet<{ events: SportsEventGroup[] }>('/api/polymarket/sports?limit=120');
+    if (data.events?.length) {
+      setCached('sports:slate:latest', data.events, 5).catch((err) =>
+        console.warn('[cache] set sports slate failed', err),
       );
     }
-    return data.markets;
+    return data.events ?? [];
   } catch (error) {
     console.error('[api] fetchSportsMarkets failed', error);
     return [];

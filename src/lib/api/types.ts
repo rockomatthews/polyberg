@@ -32,6 +32,28 @@ export type Market = {
   status: 'open' | 'resolved' | 'suspended';
 };
 
+export type SportsMarketVariant = {
+  id: string;
+  label: string;
+  marketType: string | null;
+  line: number | null;
+  market: Market;
+};
+
+export type SportsEventGroup = {
+  id: string;
+  league: string;
+  leagueSlug: string;
+  icon: string | null;
+  title: string;
+  startTime: string | null;
+  status: 'live' | 'upcoming' | 'closed';
+  homeTeam: string | null;
+  awayTeam: string | null;
+  tag: string | null;
+  variants: SportsMarketVariant[];
+};
+
 export type OrderBookLevel = {
   price: number;
   size: number;

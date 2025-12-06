@@ -2,7 +2,6 @@ import type { Market, MarketCategory } from '@/lib/api/types';
 import { clobClient } from '@/lib/polymarket/clobClient';
 import { logger } from '@/lib/logger';
 import { env } from '@/lib/env';
-import { fetchSportsSlate } from '@/lib/polymarket/sportsService';
 import { getLiveMarketOverlay, getLiveMarketSnapshot } from '@/lib/rtds/hub';
 
 type ClobToken = {
@@ -123,60 +122,6 @@ export async function loadMarketSnapshots(
 
   const curated = pickFeaturedMarkets(sourceMarkets, limit, now);
   return hydrateMarkets(curated);
-}
-
-export async function loadSportsMarkets(options: { limit?: number; now?: number } = {}) {
-  const limit = clampLimit(Number.isFinite(options.limit) ? Number(options.limit) : 200);
-  const now = options.now ?? Date.now();
-  const gammaSlate = await fetchSportsSlate({ limit, now });
-  const recentGamma = gammaSlate.filter((market) => isUpcomingMarket(market, now));
-  if (recentGamma.length >= limit / 2) {
-    return recentGamma.slice(0, limit);
-  }
-  const sourceMarkets = await fetchEligibleMarkets(now);
-  const deduped = new Map<string, ClobMarket>();
-  sourceMarkets.forEach((market) => {
-    if (resolveCategory(market) !== 'sports') {
-      return;
-    }
-    if (!deduped.has(market.condition_id)) {
-      deduped.set(market.condition_id, market);
-    }
-  });
-  const sorted = Array.from(deduped.values()).sort((a, b) => {
-    const aStart =
-      resolveEventStartTimestamp(a) ?? resolveEndTimestamp(a.end_date_iso ?? a.endDate) ?? Infinity;
-    const bStart =
-      resolveEventStartTimestamp(b) ?? resolveEndTimestamp(b.end_date_iso ?? b.endDate) ?? Infinity;
-    return aStart - bStart;
-  });
-  const hydratedFallback = await hydrateMarkets(sorted.slice(0, limit));
-  const recentFallback = hydratedFallback.filter((market) => isUpcomingMarket(market, now));
-  if (!recentGamma.length) {
-    return recentFallback;
-  }
-  const merged = [...recentGamma, ...recentFallback];
-  const seen = new Set<string>();
-  const unique: Market[] = [];
-  for (const market of merged) {
-    if (seen.has(market.conditionId)) continue;
-    seen.add(market.conditionId);
-    unique.push(market);
-    if (unique.length >= limit) break;
-  }
-  return unique;
-}
-
-function isUpcomingMarket(market: Market, now: number) {
-  if (!market.endDate) {
-    return true;
-  }
-  const timestamp = Date.parse(market.endDate);
-  if (Number.isNaN(timestamp)) {
-    return true;
-  }
-  const cutoff = now - 2 * 60 * 60 * 1000;
-  return timestamp >= cutoff;
 }
 
 async function hydrateMarkets(markets: ClobMarket[]): Promise<Market[]> {

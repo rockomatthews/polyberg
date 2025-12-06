@@ -307,6 +307,23 @@ export async function fetchSportsSlate(options: SlateOptions = {}): Promise<Spor
   }));
 }
 
+const STALE_GROUP_BUFFER_MS = 2 * 60 * 60 * 1000;
+
+function normalizeLeagueSlug(slug?: string | null, fallback?: string | null) {
+  const source = slug ?? fallback ?? 'sports';
+  return source
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'sports';
+}
+
+type GroupAccumulator = {
+  group: Omit<SportsEventGroup, 'variants'>;
+  variantsByType: Map<string, SportsMarketVariant[]>;
+};
+
 export async function loadSportsEventGroups(
   options: { limit?: number; now?: number } = {},
 ): Promise<SportsEventGroup[]> {
@@ -316,7 +333,8 @@ export async function loadSportsEventGroups(
   if (!slate.length) {
     return [];
   }
-  const groups = new Map<string, SportsEventGroup>();
+
+  const groups = new Map<string, GroupAccumulator>();
 
   for (const entry of slate) {
     const { pair, meta } = entry;
@@ -332,34 +350,48 @@ export async function loadSportsEventGroups(
             : 'upcoming';
 
       groups.set(meta.groupId, {
-        id: meta.groupId,
-        league: meta.tag,
-        leagueSlug: meta.leagueSlug,
-        icon: meta.icon,
-        title: meta.groupLabel ?? pair.market.question,
-        startTime,
-        status,
-        homeTeam: meta.homeTeam,
-        awayTeam: meta.awayTeam,
-        tag: meta.tag,
-        variants: [],
+        group: {
+          id: meta.groupId,
+          league: meta.tag,
+          leagueSlug: normalizeLeagueSlug(meta.leagueSlug, meta.tag),
+          icon: meta.icon,
+          title: meta.groupLabel ?? pair.market.question,
+          startTime,
+          status,
+          homeTeam: meta.homeTeam,
+          awayTeam: meta.awayTeam,
+          tag: meta.tag,
+          variants: [],
+        },
+        variantsByType: new Map(),
       });
     }
+
+    const normalizedType = (meta.marketType ?? 'other').toLowerCase();
     const variant: SportsMarketVariant = {
       id: pair.market.conditionId,
       label: pair.market.question,
-      marketType: meta.marketType,
+      marketType: normalizedType,
       line: meta.line,
       market: pair.market,
     };
-    groups.get(meta.groupId)!.variants.push(variant);
+
+    const accumulator = groups.get(meta.groupId)!;
+    const bucket = accumulator.variantsByType.get(normalizedType) ?? [];
+    bucket.push(variant);
+    accumulator.variantsByType.set(normalizedType, bucket);
   }
 
   const prioritized = Array.from(groups.values())
-    .map((group) => ({
+    .map(({ group, variantsByType }) => ({
       ...group,
-      variants: orderVariants(group.variants),
+      variants: buildPrimaryVariants(variantsByType),
     }))
+    .filter((group) => {
+      const startTs = group.startTime ? Date.parse(group.startTime) : null;
+      return !startTs || startTs >= now - STALE_GROUP_BUFFER_MS;
+    })
+    .filter((group) => group.variants.length > 0)
     .sort((a, b) => {
       const aTime = a.startTime ? Date.parse(a.startTime) : Number.MAX_SAFE_INTEGER;
       const bTime = b.startTime ? Date.parse(b.startTime) : Number.MAX_SAFE_INTEGER;
@@ -407,18 +439,73 @@ function normalizeMarketTypeLabel(value?: string | null, question?: string | nul
 }
 
 const VARIANT_ORDER = ['moneyline', 'spread', 'total'];
+const NON_REGULATION_KEYWORDS = [
+  '1h',
+  'first half',
+  '2h',
+  'second half',
+  '1q',
+  'first quarter',
+  '2q',
+  'second quarter',
+  '3q',
+  'third quarter',
+  '4q',
+  'fourth quarter',
+  'ot',
+  'overtime',
+  'race to',
+  'team total',
+  'player',
+  'series',
+  'parlay',
+  'alt',
+];
 
-function orderVariants(variants: SportsMarketVariant[]) {
-  return [...variants].sort((a, b) => {
-    const aIndex = VARIANT_ORDER.indexOf((a.marketType ?? '').toLowerCase());
-    const bIndex = VARIANT_ORDER.indexOf((b.marketType ?? '').toLowerCase());
-    if (aIndex === -1 && bIndex === -1) {
-      return (a.line ?? 0) - (b.line ?? 0);
+function buildPrimaryVariants(buckets: Map<string, SportsMarketVariant[]>) {
+  const ordered: SportsMarketVariant[] = [];
+  for (const type of VARIANT_ORDER) {
+    const bucket = buckets.get(type) ?? [];
+    const selected = selectPrimaryVariant(type, bucket);
+    if (selected) {
+      ordered.push(selected);
     }
-    if (aIndex === -1) return 1;
-    if (bIndex === -1) return -1;
-    return aIndex - bIndex;
-  });
+  }
+  return ordered;
+}
+
+function selectPrimaryVariant(type: string, candidates: SportsMarketVariant[]): SportsMarketVariant | null {
+  if (!candidates.length) {
+    return null;
+  }
+  const regulation = candidates.filter((variant) => isRegulationQuestion(variant.market.question));
+  const pool = regulation.length ? regulation : candidates;
+
+  if (type === 'moneyline') {
+    return pool[0] ?? null;
+  }
+
+  if (type === 'spread') {
+    const sorted = pool
+      .slice()
+      .sort((a, b) => Math.abs(a.line ?? Number.POSITIVE_INFINITY) - Math.abs(b.line ?? Number.POSITIVE_INFINITY));
+    return sorted[0] ?? pool[0] ?? null;
+  }
+
+  if (type === 'total') {
+    const numeric = pool.filter((variant) => Number.isFinite(variant.line));
+    const sorted = (numeric.length ? numeric : pool).slice().sort((a, b) => (a.line ?? 0) - (b.line ?? 0));
+    const medianIndex = Math.floor(sorted.length / 2);
+    return sorted[medianIndex] ?? sorted[0] ?? null;
+  }
+
+  return pool[0] ?? null;
+}
+
+function isRegulationQuestion(question?: string | null) {
+  if (!question) return true;
+  const normalized = question.toLowerCase();
+  return !NON_REGULATION_KEYWORDS.some((keyword) => normalized.includes(keyword));
 }
 
 function extractLeague(event: GammaEvent): string | null {

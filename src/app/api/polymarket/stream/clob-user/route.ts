@@ -1,5 +1,3 @@
-'use server';
-
 import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { RealTimeDataClient, type Message } from '@polymarket/real-time-data-client';

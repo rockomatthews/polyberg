@@ -3,7 +3,8 @@ import { AssetType, OrderType, Side } from '@polymarket/clob-client';
 import { z } from 'zod';
 import { getServerSession } from 'next-auth/next';
 import { parseUnits } from '@ethersproject/units';
-import { Contract, Wallet } from '@ethersproject/wallet';
+import { Contract } from '@ethersproject/contracts';
+import { Wallet } from '@ethersproject/wallet';
 import { JsonRpcProvider } from '@ethersproject/providers';
 import { MaxUint256 } from '@ethersproject/constants';
 

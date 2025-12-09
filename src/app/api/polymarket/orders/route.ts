@@ -3,6 +3,9 @@ import { AssetType, OrderType, Side } from '@polymarket/clob-client';
 import { z } from 'zod';
 import { getServerSession } from 'next-auth/next';
 import { parseUnits } from '@ethersproject/units';
+import { Contract, Wallet } from '@ethersproject/wallet';
+import { JsonRpcProvider } from '@ethersproject/providers';
+import { MaxUint256 } from '@ethersproject/constants';
 
 import { authOptions } from '@/lib/auth';
 import { ensureTradingClient } from '@/lib/polymarket/tradingClient';
@@ -41,6 +44,12 @@ const tradeSchema = z.object({
 });
 
 type SubmitPayload = z.infer<typeof tradeSchema>;
+
+const EXCHANGE_ADDRESS = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';
+const erc20Abi = [
+  'function allowance(address owner, address spender) view returns (uint256)',
+  'function approve(address spender, uint256 amount) returns (bool)',
+];
 
 type ClassifiedOrderError =
   | {
@@ -409,8 +418,51 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const shortfallRaw = parseUnits(shortfall.toFixed(6), 6).toString();
-      const transferTx = createTransferTransaction(env.collateralAddress, orderSignerAddress, shortfallRaw);
+      const provider = new JsonRpcProvider(env.relayerRpcUrl || 'https://polygon-rpc.com', env.polymarketChainId);
+      const makerWallet = new Wallet(ownerPrivateKey, provider);
+      const erc20 = new Contract(env.collateralAddress, erc20Abi, makerWallet);
+
+      const shortfallRaw = parseUnits(shortfall.toFixed(6), 6);
+      const allowance = await erc20.allowance(makerWallet.address, EXCHANGE_ADDRESS);
+      if (allowance.lt(shortfallRaw)) {
+        try {
+          const approveTx = await erc20.approve(EXCHANGE_ADDRESS, MaxUint256.toString());
+          logger.info('orders.approve.submit', {
+            userId: session.user.id,
+            maker: makerWallet.address,
+            exchange: EXCHANGE_ADDRESS,
+            tx: approveTx.hash,
+          });
+          await approveTx.wait();
+          logger.info('orders.approve.mined', {
+            userId: session.user.id,
+            maker: makerWallet.address,
+            exchange: EXCHANGE_ADDRESS,
+            tx: approveTx.hash,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const gasHint =
+            /insufficient funds for gas/i.test(message) || /intrinsic gas too low/i.test(message)
+              ? 'Add a small amount of MATIC to cover the one-time approval.'
+              : undefined;
+          logger.error('orders.approve.failed', {
+            userId: session.user.id,
+            maker: makerWallet.address,
+            error: message,
+          });
+          return NextResponse.json(
+            {
+              error: 'Approval to CTF exchange failed.',
+              code: 'APPROVAL_FAILED',
+              hint: gasHint,
+            },
+            { status: 402 },
+          );
+        }
+      }
+
+      const transferTx = createTransferTransaction(env.collateralAddress, orderSignerAddress, shortfallRaw.toString());
 
       try {
         const result = await executeTransactionsWithSigner(
@@ -499,6 +551,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const orderId =
+      result?.orderID ??
+      result?.order?.orderID ??
+      result?.id ??
+      (typeof result === 'object' && result && 'order_hash' in result
+        ? (result as { order_hash?: string }).order_hash
+        : null);
+    const successFlag =
+      (typeof result === 'object' && result && 'success' in result
+        ? (result as { success?: unknown }).success === true
+        : undefined);
+
+    if (!orderId && successFlag !== true) {
+      logger.error('orders.submit.unknownResponse', {
+        userId: session.user.id,
+        execution: isMarketOrder ? 'market' : 'limit',
+        response: typeof result === 'object' ? result : String(result),
+      });
+      return NextResponse.json(
+        {
+          error: 'Order submission did not return an order id',
+          code: 'ORDER_SUBMIT_FAILED',
+          response: result ?? null,
+        },
+        { status: 502 },
+      );
+    }
+
     const builderError = resolveBuilderError(result);
     if (builderError) {
       logger.error('orders.submit.builderError', {
@@ -513,9 +593,10 @@ export async function POST(request: NextRequest) {
 
     logger.info('orders.submit.posted', {
       userId: session.user.id,
-      orderId: result?.orderID ?? result?.id ?? null,
+      orderId: orderId ?? null,
       execution: isMarketOrder ? 'market' : 'limit',
       deferExec,
+      response: typeof result === 'object' ? result : String(result),
     });
 
     const responsePayload = {

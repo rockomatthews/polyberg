@@ -16,6 +16,7 @@ import { useMarketsData, useOrderBookData } from '@/hooks/useTerminalData';
 import { useTerminalStore } from '@/state/useTerminalStore';
 import { useSafeStatus } from '@/hooks/useSafeStatus';
 import { useSafeBalance } from '@/hooks/useSafeBalance';
+import { useClobBalance } from '@/hooks/useClobBalance';
 import { estimateOrderCollateral } from '@/lib/trading/collateral';
 
 const deriveMidPrice = (bid: number | null, ask: number | null) => {
@@ -61,6 +62,11 @@ export function TradeTicketPanel() {
   const safeBalanceLoading = safeBalanceQuery.isLoading || safeBalanceQuery.isFetching;
   const safeBalanceErrorMessage =
     safeBalanceQuery.error instanceof Error ? safeBalanceQuery.error.message : null;
+  const clobBalanceQuery = useClobBalance(isAuthenticated);
+  const clobBalanceValue = clobBalanceQuery.data?.clob?.balance ?? null;
+  const clobBalanceLoading = clobBalanceQuery.isLoading || clobBalanceQuery.isFetching;
+  const clobBalanceErrorMessage =
+    clobBalanceQuery.error instanceof Error ? clobBalanceQuery.error.message : null;
 
   const activeMarket =
     markets?.find((market) => market.conditionId === selectedMarketId) ??
@@ -126,6 +132,9 @@ export function TradeTicketPanel() {
       if (safeBalanceQuery.refetch) {
         void safeBalanceQuery.refetch();
       }
+      if (clobBalanceQuery.refetch) {
+        void clobBalanceQuery.refetch();
+      }
     },
   });
 
@@ -181,6 +190,7 @@ export function TradeTicketPanel() {
       : { sizeInContracts: estimatedShares, worstCasePrice: 0, requiredCollateral: 0 };
   const requiredCollateralUsd = collateralEstimation.requiredCollateral;
   const balanceGateActive = safeRequired && safeReady && Boolean(safeAddress);
+  const clobGateActive = clobBalanceValue != null;
   const submitDisabled =
     !effectiveTokenId ||
     placeOrder.isPending ||
@@ -189,6 +199,7 @@ export function TradeTicketPanel() {
     normalizedSizeThousands <= 0;
   const orderErrorCode = getOrderErrorCode(placeOrder.error);
   const showInsufficientFunds = orderErrorCode === 'INSUFFICIENT_FUNDS';
+  const showInsufficientClobFunds = orderErrorCode === 'INSUFFICIENT_CLOB_FUNDS';
 
   const handleSubmit = () => {
     if (!isAuthenticated) {
@@ -414,6 +425,16 @@ export function TradeTicketPanel() {
                   : safeBalanceErrorMessage ?? '––'
               : '––'}
           </Typography>
+          <Typography variant="caption" color="text.secondary">
+            CLOB balance $
+            {clobGateActive
+              ? clobBalanceValue != null
+                ? clobBalanceValue.toFixed(2)
+                : clobBalanceLoading
+                  ? 'checking…'
+                  : clobBalanceErrorMessage ?? '––'
+              : '––'}
+          </Typography>
         </Stack>
 
         <Button
@@ -447,7 +468,12 @@ export function TradeTicketPanel() {
             and try again.
           </Alert>
         ) : null}
-        {placeOrder.isError && !showInsufficientFunds ? (
+        {showInsufficientClobFunds ? (
+          <Alert severity="warning" variant="outlined">
+            Trading balance on Polymarket is low. Top up your CLOB balance before executing.
+          </Alert>
+        ) : null}
+        {placeOrder.isError && !showInsufficientFunds && !showInsufficientClobFunds ? (
           <Alert severity="error" variant="outlined">
             {placeOrder.error instanceof Error ? placeOrder.error.message : 'Order failed'}
           </Alert>

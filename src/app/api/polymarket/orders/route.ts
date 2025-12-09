@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { OrderType, Side } from '@polymarket/clob-client';
+import { AssetType, OrderType, Side } from '@polymarket/clob-client';
 import { z } from 'zod';
 import { getServerSession } from 'next-auth/next';
+import { parseUnits } from '@ethersproject/units';
 
 import { authOptions } from '@/lib/auth';
 import { ensureTradingClient } from '@/lib/polymarket/tradingClient';
@@ -21,6 +22,12 @@ import {
   ensureUserTradingCredentials,
   TradingCredentialsError,
 } from '@/lib/services/tradingCredentialsService';
+import { env } from '@/lib/env';
+import { getUserSafe } from '@/lib/services/userService';
+import {
+  createTransferTransaction,
+  executeTransactionsWithSigner,
+} from '@/lib/relayer/transactions';
 
 const tradeSchema = z.object({
   tokenId: z.string().min(1),
@@ -283,6 +290,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: ensured.error }, { status: ensured.status });
   }
 
+  const orderSignerAddress =
+    (ensured.client as { signer?: { address?: string } }).signer?.address ?? null;
+  if (!orderSignerAddress) {
+    logger.error('orders.signer.missing', { userId: session.user.id });
+    return NextResponse.json(
+      { error: 'Order signer is not configured for this user' },
+      { status: 500 },
+    );
+  }
+
   let parsedPayload: SubmitPayload | null = null;
 
   try {
@@ -305,6 +322,7 @@ export async function POST(request: NextRequest) {
     const deferExec = !isMarketOrder && parsedPayload.executionMode === 'passive';
 
     let availableSafeBalance: number | null = null;
+    let clobBalance: number | null = null;
     try {
       if (safeAddress) {
         const { balance } = await getSafeBalance(safeAddress);
@@ -329,33 +347,108 @@ export async function POST(request: NextRequest) {
       throw error;
     }
 
+    try {
+      const allowance = await ensured.client.getBalanceAllowance({ asset_type: AssetType.COLLATERAL });
+      clobBalance = Number(allowance.balance ?? 0);
+      logger.info('orders.clob.balance', {
+        userId: session.user.id,
+        balance: clobBalance.toFixed(4),
+      });
+    } catch (error) {
+      logger.warn('orders.clobBalance.failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     const { requiredCollateral } = estimateOrderCollateral({
       side: parsedPayload.side,
       priceDecimals: limitPrice,
       sizeThousands: parsedPayload.size,
       slippageCents: parsedPayload.slippage,
     });
+    const clobBalanceValue = clobBalance ?? 0;
+    const shortfall = Math.max(0, requiredCollateral - clobBalanceValue);
 
-    if (
-      availableSafeBalance != null &&
-      requiredCollateral > availableSafeBalance + COLLATERAL_TOLERANCE
-    ) {
-      const formattedRequired = requiredCollateral.toFixed(2);
-      const formattedAvailable = availableSafeBalance.toFixed(2);
-      logger.warn('orders.safe.insufficient', {
-        userId: session.user.id,
-        required: formattedRequired,
-        available: formattedAvailable,
-      });
-      return NextResponse.json(
-        {
-          error: `Insufficient Safe balance. Need $${formattedRequired}, available $${formattedAvailable}.`,
-          code: 'INSUFFICIENT_FUNDS',
-          safeBalance: availableSafeBalance,
-          required: requiredCollateral,
-        },
-        { status: 402 },
-      );
+    if (shortfall > 0) {
+      if (availableSafeBalance == null) {
+        logger.warn('orders.safe.balance.missing', { userId: session.user.id });
+        return NextResponse.json(
+          { error: 'Unable to read Safe balance to fund trading', code: 'SAFE_BALANCE_UNKNOWN' },
+          { status: 409 },
+        );
+      }
+      if (availableSafeBalance + COLLATERAL_TOLERANCE < shortfall) {
+        const formattedRequired = shortfall.toFixed(2);
+        const formattedAvailable = availableSafeBalance.toFixed(2);
+        logger.warn('orders.safe.insufficient', {
+          userId: session.user.id,
+          required: formattedRequired,
+          available: formattedAvailable,
+        });
+        return NextResponse.json(
+          {
+            error: `Insufficient Safe balance. Need $${formattedRequired}, available $${formattedAvailable}.`,
+            code: 'INSUFFICIENT_FUNDS',
+            safeBalance: availableSafeBalance,
+            required: shortfall,
+          },
+          { status: 402 },
+        );
+      }
+
+      const safeRecord = await getUserSafe(session.user.id);
+      const ownerPrivateKey = safeRecord?.owner_private_key ?? null;
+      if (!ownerPrivateKey) {
+        logger.error('orders.safe.ownerKey.missing', { userId: session.user.id });
+        return NextResponse.json(
+          {
+            error: 'Safe owner key missing. Redeploy your Safe from the profile page before trading.',
+            code: 'SAFE_OWNER_KEY_MISSING',
+          },
+          { status: 409 },
+        );
+      }
+
+      const shortfallRaw = parseUnits(shortfall.toFixed(6), 6).toString();
+      const transferTx = createTransferTransaction(env.collateralAddress, orderSignerAddress, shortfallRaw);
+
+      try {
+        const result = await executeTransactionsWithSigner(
+          ownerPrivateKey,
+          [transferTx],
+          `auto-fund clob ${shortfall.toFixed(4)}`,
+        );
+        logger.info('orders.autofund.success', {
+          userId: session.user.id,
+          safe: safeAddress,
+          shortfall: shortfall.toFixed(4),
+          txHash: result?.transactionHash ?? null,
+        });
+        const allowance = await ensured.client.getBalanceAllowance({ asset_type: AssetType.COLLATERAL });
+        clobBalance = Number(allowance.balance ?? 0);
+      } catch (error) {
+        logger.error('orders.autofund.failed', {
+          userId: session.user.id,
+          error: error instanceof Error ? error.message : String(error),
+          shortfall: shortfall.toFixed(4),
+        });
+        return NextResponse.json(
+          { error: 'Funding from Safe failed. Retry or top up your Safe.', code: 'AUTO_FUND_FAILED' },
+          { status: 502 },
+        );
+      }
+
+      if (clobBalance + COLLATERAL_TOLERANCE < requiredCollateral) {
+        return NextResponse.json(
+          {
+            error: 'Trading balance still low after funding. Please retry.',
+            code: 'INSUFFICIENT_CLOB_FUNDS',
+            clobBalance,
+            required: requiredCollateral,
+          },
+          { status: 402 },
+        );
+      }
     }
 
     let result;

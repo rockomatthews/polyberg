@@ -361,7 +361,6 @@ export async function loadSportsEventGroups(
           homeTeam: meta.homeTeam,
           awayTeam: meta.awayTeam,
           tag: meta.tag,
-          variants: [],
         },
         variantsByType: new Map(),
       });

@@ -1,4 +1,3 @@
-import { JsonRpcProvider } from '@ethersproject/providers';
 import { Wallet } from '@ethersproject/wallet';
 import { BuilderConfig } from '@polymarket/builder-signing-sdk';
 import { ClobClient } from '@polymarket/clob-client';
@@ -66,9 +65,9 @@ function buildOrderSigner(payload: UserCredentialPayload) {
   if (!privateKey) {
     return undefined;
   }
-  const rpcUrl = payload.relayerRpcUrl ?? env.relayerRpcUrl;
-  const provider = rpcUrl ? new JsonRpcProvider(rpcUrl, polymarketChainId) : undefined;
-  return new Wallet(privateKey, provider);
+  // For CLOB order signing, an RPC provider is not required and can cause spurious
+  // "could not detect network" failures in serverless environments.
+  return new Wallet(privateKey);
 }
 
 function hasUserOverrides(payload: UserCredentialPayload | null): payload is UserCredentialPayload {

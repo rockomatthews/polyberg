@@ -1,4 +1,3 @@
-import { JsonRpcProvider } from '@ethersproject/providers';
 import { Wallet } from '@ethersproject/wallet';
 import { ClobClient, Chain } from '@polymarket/clob-client';
 import { BuilderConfig } from '@polymarket/builder-signing-sdk';
@@ -17,10 +16,7 @@ const builderConfig =
 
 const orderSigner =
   env.orderSignerPrivateKey
-    ? new Wallet(
-        env.orderSignerPrivateKey,
-        env.relayerRpcUrl ? new JsonRpcProvider(env.relayerRpcUrl, polymarketChainId) : undefined,
-      )
+    ? new Wallet(env.orderSignerPrivateKey)
     : undefined;
 
 export const clobClient = new ClobClient(

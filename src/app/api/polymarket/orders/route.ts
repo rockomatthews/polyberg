@@ -52,6 +52,30 @@ const erc20Abi = [
   'function approve(address spender, uint256 amount) returns (bool)',
 ];
 
+const DEFAULT_POLYGON_RPCS = [
+  'https://polygon-rpc.com',
+  'https://rpc.ankr.com/polygon',
+  'https://polygon.llamarpc.com',
+] as const;
+
+async function resolveRpcProvider(chainId: number, rpcUrl?: string) {
+  const rpcUrls = Array.from(new Set([rpcUrl, ...DEFAULT_POLYGON_RPCS].filter(Boolean))) as string[];
+  const failures: Array<{ rpcUrl: string; message: string }> = [];
+  for (const url of rpcUrls) {
+    const provider = new JsonRpcProvider(url, chainId);
+    try {
+      await provider.getNetwork();
+      return { provider, rpcUrl: url, failures };
+    } catch (error) {
+      failures.push({
+        rpcUrl: url,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return { provider: null as JsonRpcProvider | null, rpcUrl: rpcUrls[0] ?? null, failures };
+}
+
 type ClassifiedOrderError =
   | {
       code: 'INSUFFICIENT_FUNDS';
@@ -419,12 +443,44 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const provider = new JsonRpcProvider(env.relayerRpcUrl || 'https://polygon-rpc.com', env.polymarketChainId);
-      const makerWallet = new Wallet(ownerPrivateKey, provider);
+      const resolved = await resolveRpcProvider(env.polymarketChainId, env.relayerRpcUrl);
+      if (!resolved.provider) {
+        logger.error('orders.rpc.failed', {
+          userId: session.user.id,
+          rpcUrl: resolved.rpcUrl,
+          failures: resolved.failures,
+        });
+        return NextResponse.json(
+          {
+            error: 'Trading RPC unavailable. Check POLYMARKET_RELAYER_RPC_URL.',
+            code: 'RPC_UNAVAILABLE',
+            rpcUrl: resolved.rpcUrl,
+            meta: { failures: resolved.failures },
+          },
+          { status: 502 },
+        );
+      }
+
+      const makerWallet = new Wallet(ownerPrivateKey, resolved.provider);
       const erc20 = new Contract(env.collateralAddress, erc20Abi, makerWallet);
 
       const shortfallRaw = parseUnits(shortfall.toFixed(6), 6);
-      const allowance = await erc20.allowance(makerWallet.address, EXCHANGE_ADDRESS);
+      let allowance;
+      try {
+        allowance = await erc20.allowance(makerWallet.address, EXCHANGE_ADDRESS);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error('orders.allowance.failed', {
+          userId: session.user.id,
+          maker: makerWallet.address,
+          exchange: EXCHANGE_ADDRESS,
+          error: message,
+        });
+        return NextResponse.json(
+          { error: 'Unable to read allowance (RPC failure).', code: 'ALLOWANCE_FAILED' },
+          { status: 502 },
+        );
+      }
       if (allowance.lt(shortfallRaw)) {
         try {
           const approveTx = await erc20.approve(EXCHANGE_ADDRESS, MaxUint256.toString());

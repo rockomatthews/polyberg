@@ -50,6 +50,7 @@ const EXCHANGE_ADDRESS = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';
 const erc20Abi = [
   'function allowance(address owner, address spender) view returns (uint256)',
   'function approve(address spender, uint256 amount) returns (bool)',
+  'function balanceOf(address owner) view returns (uint256)',
 ];
 
 const DEFAULT_POLYGON_RPCS = [
@@ -197,7 +198,8 @@ function classifyOrderError(error: unknown): ClassifiedOrderError {
     return {
       code: 'INSUFFICIENT_FUNDS',
       status: 402,
-      message: 'No funds detected in your Safe. Deposit Polygon USDC and retry.',
+      message:
+        'Insufficient collateral/allowance for this trade. Ensure your Safe holds the correct USDC token and the maker address has approved the CTF Exchange.',
       rawMessage,
     };
   }
@@ -465,6 +467,22 @@ export async function POST(request: NextRequest) {
       const erc20 = new Contract(env.collateralAddress, erc20Abi, makerWallet);
 
       const shortfallRaw = parseUnits(shortfall.toFixed(6), 6);
+      let makerBalance;
+      try {
+        makerBalance = await erc20.balanceOf(makerWallet.address);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error('orders.makerBalance.failed', {
+          userId: session.user.id,
+          maker: makerWallet.address,
+          collateral: env.collateralAddress,
+          error: message,
+        });
+        return NextResponse.json(
+          { error: 'Unable to read maker balance (RPC failure).', code: 'MAKER_BALANCE_FAILED' },
+          { status: 502 },
+        );
+      }
       let allowance;
       try {
         allowance = await erc20.allowance(makerWallet.address, EXCHANGE_ADDRESS);
@@ -519,20 +537,31 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const transferTx = createTransferTransaction(env.collateralAddress, orderSignerAddress, shortfallRaw.toString());
+      const needsFunding = makerBalance.lt(shortfallRaw);
+      const transferTx = needsFunding
+        ? createTransferTransaction(env.collateralAddress, orderSignerAddress, shortfallRaw.toString())
+        : null;
 
       try {
-        const result = await executeTransactionsWithSigner(
-          ownerPrivateKey,
-          [transferTx],
-          `auto-fund clob ${shortfall.toFixed(4)}`,
-        );
-        logger.info('orders.autofund.success', {
-          userId: session.user.id,
-          safe: safeAddress,
-          shortfall: shortfall.toFixed(4),
-          txHash: result?.transactionHash ?? null,
-        });
+        if (transferTx) {
+          const result = await executeTransactionsWithSigner(
+            ownerPrivateKey,
+            [transferTx],
+            `auto-fund clob ${shortfall.toFixed(4)}`,
+          );
+          logger.info('orders.autofund.success', {
+            userId: session.user.id,
+            safe: safeAddress,
+            shortfall: shortfall.toFixed(4),
+            txHash: result?.transactionHash ?? null,
+          });
+        } else {
+          logger.info('orders.autofund.skipped', {
+            userId: session.user.id,
+            safe: safeAddress,
+            reason: 'maker already funded',
+          });
+        }
         const allowance = await ensured.client.getBalanceAllowance({ asset_type: AssetType.COLLATERAL });
         clobBalance = Number(allowance.balance ?? 0);
       } catch (error) {
@@ -542,7 +571,15 @@ export async function POST(request: NextRequest) {
           shortfall: shortfall.toFixed(4),
         });
         return NextResponse.json(
-          { error: 'Funding from Safe failed. Retry or top up your Safe.', code: 'AUTO_FUND_FAILED' },
+          {
+            error: 'Funding from Safe failed. Ensure your Safe holds the correct USDC token and retry.',
+            code: 'AUTO_FUND_FAILED',
+            meta: {
+              safe: safeAddress,
+              maker: orderSignerAddress,
+              collateral: env.collateralAddress,
+            },
+          },
           { status: 502 },
         );
       }
@@ -550,10 +587,17 @@ export async function POST(request: NextRequest) {
       if (clobBalance + COLLATERAL_TOLERANCE < requiredCollateral) {
         return NextResponse.json(
           {
-            error: 'Trading balance still low after funding. Please retry.',
+            error:
+              'Trading balance still low after funding. This usually means the Safe holds a different USDC token than configured, or the maker has not approved the Exchange.',
             code: 'INSUFFICIENT_CLOB_FUNDS',
             clobBalance,
             required: requiredCollateral,
+            meta: {
+              safe: safeAddress,
+              maker: orderSignerAddress,
+              collateral: env.collateralAddress,
+              exchange: EXCHANGE_ADDRESS,
+            },
           },
           { status: 402 },
         );
